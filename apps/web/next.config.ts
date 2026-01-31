@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Transpile monorepo packages for Vercel deployment
+  transpilePackages: ['@repo/db'],
+
   images: {
     remotePatterns: [
       {
