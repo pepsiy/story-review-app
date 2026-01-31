@@ -1,0 +1,210 @@
+import { pgTable, text, serial, timestamp, boolean, integer, index } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
+
+// Bảng Tác phẩm (Truyện)
+export const works = pgTable('works', {
+    id: serial('id').primaryKey(),
+    slug: text('slug').notNull().unique(), // URL friendly ID
+    title: text('title').notNull(),
+    author: text('author'),
+    coverImage: text('cover_image'), // URL ảnh bìa
+    genre: text('genre'), // Thể loại
+    description: text('description'), // Giới thiệu ngắn
+    views: integer('views').default(0), // Lượt xem
+    isHot: boolean('is_hot').default(false), // Truyện hot
+    status: text('status').default('ONGOING'), // ONGOING, COMPLETED, DROPPED
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        slugIdx: index('slug_idx').on(table.slug),
+    };
+});
+
+// Bảng Chương
+export const chapters = pgTable('chapters', {
+    id: serial('id').primaryKey(),
+    workId: integer('work_id').references(() => works.id).notNull(),
+    chapterNumber: integer('chapter_number').notNull(),
+    title: text('title'),
+
+    // Nội dung gốc (BẢO MẬT - Không public ra frontend trực tiếp)
+    originalText: text('original_text'),
+
+    // Nội dung AI viết lại (Public cho người đọc)
+    aiText: text('ai_text'),
+
+    // Video Youtube (Nếu có)
+    youtubeId: text('youtube_id'),
+
+    // Phạm vi chương gốc (e.g., "1,5" = tóm tắt từ chương 1 đến 5 của bản gốc)
+    sourceChapterRange: text('source_chapter_range'),
+
+    summary: text('summary'), // Tóm tắt ngắn
+
+    status: text('status').default('DRAFT'), // DRAFT, PUBLISHED
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        workIdIdx: index('work_id_idx').on(table.workId),
+    };
+});
+
+// Bảng Review
+export const reviews = pgTable('reviews', {
+    id: serial('id').primaryKey(),
+    workId: integer('work_id').references(() => works.id).notNull(),
+    content: text('content').notNull(),
+    rating: integer('rating'), // 1-5 sao
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Bảng SEO Meta (Dùng chung cho cả Work và Chapter)
+export const seoMeta = pgTable('seo_meta', {
+    id: serial('id').primaryKey(),
+    entityType: text('entity_type').notNull(), // 'WORK' | 'CHAPTER'
+    entityId: integer('entity_id').notNull(),
+    title: text('title'), // Thẻ title tùy chỉnh
+    description: text('description'), // Meta description
+    ogImage: text('og_image'), // Ảnh share FB/Zalo
+}, (table) => {
+    return {
+        entityIdx: index('entity_idx').on(table.entityType, table.entityId),
+    };
+});
+
+// Relations
+export const worksRelations = relations(works, ({ many }) => ({
+    chapters: many(chapters),
+    comments: many(comments), // Add relation
+    favorites: many(favorites),
+}));
+
+export const chaptersRelations = relations(chapters, ({ one, many }) => ({
+    work: one(works, {
+        fields: [chapters.workId],
+        references: [works.id],
+    }),
+    comments: many(comments), // Add relation
+}));
+
+// --- AUTH & SOCIAL SCHEMA ---
+
+// Adapter for NextAuth (Auth.js)
+// Reference: https://authjs.dev/reference/adapter/drizzle
+
+export const users = pgTable("user", {
+    id: text("id")
+        .primaryKey()
+        .$defaultFn(() => crypto.randomUUID()),
+    name: text("name"),
+    email: text("email").notNull(),
+    emailVerified: timestamp("emailVerified", { mode: "date" }),
+    image: text("image"),
+    bio: text("bio"), // Giới thiệu bản thân
+    role: text("role").default("user"), // user | admin
+});
+
+export const accounts = pgTable(
+    "account",
+    {
+        userId: text("userId")
+            .notNull()
+            .references(() => users.id, { onDelete: "cascade" }),
+        type: text("type").notNull(),
+        provider: text("provider").notNull(),
+        providerAccountId: text("providerAccountId").notNull(),
+        refresh_token: text("refresh_token"),
+        access_token: text("access_token"),
+        expires_at: integer("expires_at"),
+        token_type: text("token_type"),
+        scope: text("scope"),
+        id_token: text("id_token"),
+        session_state: text("session_state"),
+    },
+    (account) => ({
+        compoundKey: index('account_provider_idx').on(account.provider, account.providerAccountId),
+    })
+);
+
+export const sessions = pgTable("session", {
+    sessionToken: text("sessionToken").primaryKey(),
+    userId: text("userId")
+        .notNull()
+        .references(() => users.id, { onDelete: "cascade" }),
+    expires: timestamp("expires", { mode: "date" }).notNull(),
+});
+
+export const verificationTokens = pgTable(
+    "verificationToken",
+    {
+        identifier: text("identifier").notNull(),
+        token: text("token").notNull(),
+        expires: timestamp("expires", { mode: "date" }).notNull(),
+    },
+    (verificationToken) => ({
+        // compositePk: primaryKey({ columns: [verificationToken.identifier, verificationToken.token] }),
+        // Drizzle specific composite key handling might differ slightly, using unique index for now or standard comp key
+        compositeIdx: index('verification_token_idx').on(verificationToken.identifier, verificationToken.token)
+    })
+);
+
+// Comments Table
+export const comments = pgTable('comments', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    workId: integer('work_id').references(() => works.id), // Comment on a Work (optional)
+    chapterId: integer('chapter_id').references(() => chapters.id), // Comment on a Chapter (optional)
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Chat Messages Table
+export const chatMessages = pgTable('chat_messages', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+    isFlagged: boolean('is_flagged').default(false), // Cho kiểm duyệt
+});
+
+// Bảng Yêu thích (Favorites/Library)
+export const favorites = pgTable('favorites', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    workId: integer('work_id').references(() => works.id, { onDelete: 'cascade' }).notNull(),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        userWorkIdx: index('user_work_idx').on(table.userId, table.workId), // Unique checking optimization
+    };
+});
+
+
+export const usersRelations = relations(users, ({ many }) => ({
+    comments: many(comments),
+    chatMessages: many(chatMessages),
+    favorites: many(favorites),
+}));
+
+export const commentsRelations = relations(comments, ({ one }) => ({
+    user: one(users, {
+        fields: [comments.userId],
+        references: [users.id],
+    }),
+    work: one(works, {
+        fields: [comments.workId],
+        references: [works.id],
+    }),
+    chapter: one(chapters, {
+        fields: [comments.chapterId],
+        references: [chapters.id],
+    }),
+}));
+
+export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+    user: one(users, {
+        fields: [chatMessages.userId],
+        references: [users.id],
+    }),
+}));

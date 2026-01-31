@@ -1,0 +1,24 @@
+{
+    "name": "@repo/db",
+    "version": "0.1.0",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": "./dist/index.js"
+    },
+    "scripts": {
+        "build": "tsc",
+        "db:push": "drizzle-kit push:pg",
+        "db:studio": "drizzle-kit studio"
+    },
+    "dependencies": {
+        "drizzle-orm": "^0.29.3",
+        "postgres": "^3.4.3",
+        "@neondatabase/serverless": "^0.6.1"
+    },
+    "devDependencies": {
+        "drizzle-kit": "^0.20.13",
+        "@types/node": "^20.10.0",
+        "typescript": "^5.3.3"
+    }
+}
