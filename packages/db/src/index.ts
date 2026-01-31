@@ -11,7 +11,7 @@ if (!rawConnectionString) {
 }
 
 // Fallback to dummy string if missing to prevent neon() from throwing during build
-const connectionString = rawConnectionString || "postgresql://dummy:dummy@dummy.neon.tech/dummy?sslmode=require";
+const connectionString = rawConnectionString || "postgresql://dummy:dummy@127.0.0.1/dummy?sslmode=require";
 
 // Remove &channel_binding=require if present (causes error in serverless)
 const cleanConnectionString = connectionString.replace("&channel_binding=require", "");
