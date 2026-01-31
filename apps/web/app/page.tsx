@@ -11,11 +11,19 @@ import { GenresWidget } from "@/components/GenresWidget";
 
 export default async function Home() {
   // Fetch data for 3 sections in parallel
-  const [hotWorks, newWorks, completedWorks] = await Promise.all([
-    db.select().from(works).where(eq(works.isHot, true)).limit(4),
-    db.select().from(works).orderBy(desc(works.updatedAt)).limit(4),
-    db.select().from(works).where(eq(works.status, 'COMPLETED')).limit(4),
-  ]);
+  // Fetch data for 3 sections in parallel with error handling
+  let hotWorks: any[] = [], newWorks: any[] = [], completedWorks: any[] = [];
+
+  try {
+    [hotWorks, newWorks, completedWorks] = await Promise.all([
+      db.select().from(works).where(eq(works.isHot, true)).limit(4),
+      db.select().from(works).orderBy(desc(works.updatedAt)).limit(4),
+      db.select().from(works).where(eq(works.status, 'COMPLETED')).limit(4),
+    ]);
+  } catch (error) {
+    console.warn("⚠️ Failed to fetch data (likely during build):", error);
+    // Return empty arrays to allow build to complete
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
