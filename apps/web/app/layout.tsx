@@ -34,7 +34,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await auth();
+  let session;
+  try {
+    session = await auth();
+  } catch (e) {
+    console.warn("⚠️ Auth failed during build (safe to ignore):", e);
+  }
 
   return (
     <html lang="vi">
