@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "@repo/db";
-import { works, chapters } from "@repo/db";
+import { works, chapters, genres } from "@repo/db";
 import { eq, desc, asc } from "drizzle-orm";
 
 // --- Works ---
@@ -241,5 +241,51 @@ export const generateAIContent = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error("AI Gen Error:", error);
         res.status(500).json({ error: error.message || "Internal Server Error" });
+
+
+    }
+};
+
+// --- Genres ---
+
+export const getGenres = async (req: Request, res: Response) => {
+    try {
+        const allGenres = await db.select().from(genres).orderBy(desc(genres.createdAt));
+        res.json(allGenres);
+    } catch (error) {
+        console.error("Error fetching genres:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+export const createGenre = async (req: Request, res: Response) => {
+    try {
+        const { name, slug, description } = req.body;
+        if (!name || !slug) return res.status(400).json({ error: "Name and Slug are required" });
+
+        const newGenre = await db.insert(genres).values({
+            name,
+            slug,
+            description
+        }).returning();
+
+        res.status(201).json(newGenre[0]);
+    } catch (error: any) {
+        console.error("Error creating genre:", error);
+        if (error.code === '23505') {
+            return res.status(409).json({ error: "Genre already exists" });
+        }
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+export const deleteGenre = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        await db.delete(genres).where(eq(genres.id, parseInt(id)));
+        res.json({ message: "Genre deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting genre:", error);
+        res.status(500).json({ error: "Internal Server Error" });
     }
 };

@@ -59,6 +59,15 @@ export const reviews = pgTable('reviews', {
     createdAt: timestamp('created_at').defaultNow(),
 });
 
+// Bảng Thể loại (Dynamic Genres)
+export const genres = pgTable('genres', {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull().unique(),
+    slug: text('slug').notNull().unique(),
+    description: text('description'),
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
 // Bảng SEO Meta (Dùng chung cho cả Work và Chapter)
 export const seoMeta = pgTable('seo_meta', {
     id: serial('id').primaryKey(),

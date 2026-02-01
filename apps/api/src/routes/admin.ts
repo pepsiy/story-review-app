@@ -23,4 +23,10 @@ router.post("/ai/generate", generateAIContent);
 import { extractUrlContent } from "../controllers/extractController";
 router.post("/extract-url", extractUrlContent);
 
+// Genre Routes
+import { getGenres, createGenre, deleteGenre } from "../controllers/adminController";
+router.get("/genres", getGenres);
+router.post("/genres", createGenre);
+router.delete("/genres/:id", deleteGenre);
+
 export default router;

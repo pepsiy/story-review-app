@@ -12,6 +12,10 @@ const port = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Public Routes
+import { getGenres } from "./controllers/adminController";
+app.get("/genres", getGenres);
+
 // Create HTTP Server
 const server = http.createServer(app);
 const io = new Server(server, {

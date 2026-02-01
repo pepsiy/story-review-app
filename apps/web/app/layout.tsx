@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Roboto } from "next/font/google";
+import { Geist, Geist_Mono, Roboto, Outfit } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -45,6 +45,12 @@ import { Footer } from "@/components/Footer";
 import { ChatPopup } from "@/components/ChatPopup";
 import { auth } from "@/auth";
 
+const outfit = Outfit({
+  variable: "--font-outfit",
+  subsets: ["latin"],
+  display: "swap",
+});
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -60,7 +66,7 @@ export default async function RootLayout({
   return (
     <html lang="vi">
       <body
-        className={`${roboto.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${roboto.variable} ${geistSans.variable} ${geistMono.variable} ${outfit.variable} antialiased`}
       >
         <Header />
         {children}
