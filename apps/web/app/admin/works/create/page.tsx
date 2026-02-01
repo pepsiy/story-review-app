@@ -43,8 +43,10 @@ export default function CreateWorkPage() {
             status: formData.get("status"),
         };
 
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
         try {
-            const res = await fetch("http://localhost:3001/admin/works", {
+            const res = await fetch(`${API_URL}/admin/works`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),

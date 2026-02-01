@@ -23,8 +23,10 @@ export default function EditWorkPage({ params }: { params: Promise<{ id: string 
     const [isHot, setIsHot] = useState(false);
 
     // Fetch existing data
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
     useEffect(() => {
-        fetch(`http://localhost:3001/admin/works/${id}`)
+        fetch(`${API_URL}/admin/works/${id}`)
             .then(res => {
                 if (!res.ok) throw new Error("Not found");
                 return res.json();
@@ -81,7 +83,7 @@ export default function EditWorkPage({ params }: { params: Promise<{ id: string 
         };
 
         try {
-            const res = await fetch(`http://localhost:3001/admin/works/${id}`, {
+            const res = await fetch(`${API_URL}/admin/works/${id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),

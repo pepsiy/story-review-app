@@ -28,8 +28,10 @@ export default function AdminWorkDetailPage({ params }: { params: Promise<{ id: 
     const [work, setWork] = useState<WorkDetail | null>(null);
     const [loading, setLoading] = useState(true);
 
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
     useEffect(() => {
-        fetch(`http://localhost:3001/admin/works/${id}`)
+        fetch(`${API_URL}/admin/works/${id}`)
             .then(res => {
                 if (!res.ok) throw new Error("Not found");
                 return res.json();
@@ -61,7 +63,7 @@ export default function AdminWorkDetailPage({ params }: { params: Promise<{ id: 
                         onClick={async () => {
                             if (confirm(`Bạn có chắc chắn muốn XÓA truyện "${work.title}" và toàn bộ chương không? Hành động này không thể hoàn tác!`)) {
                                 try {
-                                    const res = await fetch(`http://localhost:3001/admin/works/${id}`, { method: "DELETE" });
+                                    const res = await fetch(`${API_URL}/admin/works/${id}`, { method: "DELETE" });
                                     if (res.ok) {
                                         alert("Đã xóa thành công!");
                                         window.location.href = "/admin"; // Force reload
@@ -110,7 +112,7 @@ export default function AdminWorkDetailPage({ params }: { params: Promise<{ id: 
                                             onClick={async () => {
                                                 if (confirm(`Xóa chương #${chapter.chapterNumber}?\nHành động này không thể hoàn tác!`)) {
                                                     try {
-                                                        const res = await fetch(`http://localhost:3001/admin/chapters/${chapter.id}`, {
+                                                        const res = await fetch(`${API_URL}/admin/chapters/${chapter.id}`, {
                                                             method: "DELETE",
                                                         });
                                                         if (res.ok) {

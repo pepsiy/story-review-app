@@ -26,8 +26,10 @@ export default function CreateChapterPage({ params }: { params: Promise<{ id: st
     const [extracting, setExtracting] = useState(false);
 
     // Fetch work data to auto-suggest chapter number
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
     useEffect(() => {
-        fetch(`http://localhost:3001/admin/works/${id}`)
+        fetch(`${API_URL}/admin/works/${id}`)
             .then(res => res.json())
             .then(work => {
                 if (work.chapters && work.chapters.length > 0) {
@@ -66,7 +68,7 @@ export default function CreateChapterPage({ params }: { params: Promise<{ id: st
         setExtracting(true);
         try {
             // Use a CORS proxy or backend endpoint to fetch the page
-            const response = await fetch(`http://localhost:3001/admin/extract-url`, {
+            const response = await fetch(`${API_URL}/admin/extract-url`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url: extractUrl }),
@@ -118,7 +120,7 @@ Yêu cầu:
 - TUYỆT ĐỐI KHÔNG bắt đầu bằng: "Chương truyện giới thiệu...", "Chương này nói về..."
 - Độ dài: 3-5 câu.`;
 
-            const summaryRes = await fetch("http://localhost:3001/admin/ai/generate", {
+            const summaryRes = await fetch(`${API_URL}/admin/ai/generate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ prompt: summaryPrompt }),
@@ -152,7 +154,7 @@ ${cleanedText}
 
 Bắt đầu viết (Ngắn gọn, súc tích):`;
 
-            const rewriteRes = await fetch("http://localhost:3001/admin/ai/generate", {
+            const rewriteRes = await fetch(`${API_URL}/admin/ai/generate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ prompt: rewritePrompt }),
@@ -177,7 +179,7 @@ Yêu cầu:
 
 Chỉ trả về TÊN CHƯƠNG, không giải thích:`;
 
-            const titleRes = await fetch("http://localhost:3001/admin/ai/generate", {
+            const titleRes = await fetch(`${API_URL}/admin/ai/generate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ prompt: titlePrompt }),
@@ -212,7 +214,7 @@ Chỉ trả về TÊN CHƯƠNG, không giải thích:`;
         };
 
         try {
-            const res = await fetch("http://localhost:3001/admin/chapters", {
+            const res = await fetch(`${API_URL}/admin/chapters`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),

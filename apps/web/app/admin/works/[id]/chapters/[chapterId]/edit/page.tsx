@@ -23,9 +23,11 @@ export default function EditChapterPage({ params }: { params: Promise<{ id: stri
     const [youtubeId, setYoutubeId] = useState("");
     const [status, setStatus] = useState("DRAFT");
 
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
     // Fetch existing chapter data
     useEffect(() => {
-        fetch(`http://localhost:3001/admin/works/${id}`)
+        fetch(`${API_URL}/admin/works/${id}`)
             .then(res => res.json())
             .then(work => {
                 const chapter = work.chapters?.find((ch: any) => ch.id === parseInt(chapterId));
@@ -97,7 +99,7 @@ ${cleanedText}
 
 Bắt đầu viết (Ngắn gọn, súc tích):`;
 
-                const rewriteRes = await fetch("http://localhost:3001/admin/ai/generate", {
+                const rewriteRes = await fetch(`${API_URL}/admin/ai/generate`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ prompt: rewritePrompt }),
@@ -119,7 +121,7 @@ Yêu cầu:
 - TUYỆT ĐỐI KHÔNG bắt đầu bằng: "Chương truyện giới thiệu...", "Chương này nói về..."
 - Độ dài: 3-5 câu.`;
 
-            const summaryRes = await fetch("http://localhost:3001/admin/ai/generate", {
+            const summaryRes = await fetch(`${API_URL}/admin/ai/generate`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ prompt: summaryPrompt }),
@@ -145,7 +147,7 @@ Yêu cầu:
 
 Chỉ trả về TÊN CHƯƠNG, không giải thích:`;
 
-                const titleRes = await fetch("http://localhost:3001/admin/ai/generate", {
+                const titleRes = await fetch(`${API_URL}/admin/ai/generate`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ prompt: titlePrompt }),
@@ -181,7 +183,7 @@ Chỉ trả về TÊN CHƯƠNG, không giải thích:`;
         };
 
         try {
-            const res = await fetch(`http://localhost:3001/admin/chapters/${chapterId}`, {
+            const res = await fetch(`${API_URL}/admin/chapters/${chapterId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
