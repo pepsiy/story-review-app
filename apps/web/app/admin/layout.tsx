@@ -49,6 +49,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <Link href="/admin/genres" className="block px-4 py-2 rounded hover:bg-indigo-50 text-gray-700 font-medium">
                         🏷️ Quản lý Thể loại
                     </Link>
+                    <Link href="/admin/settings" className="block px-4 py-2 rounded hover:bg-indigo-50 text-gray-700 font-medium">
+                        ⚙️ Cấu hình
+                    </Link>
                     <div className="pt-4 border-t mt-4">
                         <Button
                             variant="ghost"

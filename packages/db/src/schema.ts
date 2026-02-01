@@ -68,6 +68,13 @@ export const genres = pgTable('genres', {
     createdAt: timestamp('created_at').defaultNow(),
 });
 
+// Bảng Cấu hình Hệ thống (System Settings)
+export const systemSettings = pgTable('system_settings', {
+    key: text('key').primaryKey(), // e.g., 'GEMINI_API_KEY'
+    value: text('value').notNull(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Bảng SEO Meta (Dùng chung cho cả Work và Chapter)
 export const seoMeta = pgTable('seo_meta', {
     id: serial('id').primaryKey(),

@@ -24,9 +24,13 @@ import { extractUrlContent } from "../controllers/extractController";
 router.post("/extract-url", extractUrlContent);
 
 // Genre Routes
-import { getGenres, createGenre, deleteGenre } from "../controllers/adminController";
+import { getGenres, createGenre, deleteGenre, getSettings, updateSettings } from "../controllers/adminController";
 router.get("/genres", getGenres);
 router.post("/genres", createGenre);
 router.delete("/genres/:id", deleteGenre);
+
+// Settings Routes
+router.get("/settings", getSettings);
+router.post("/settings", updateSettings);
 
 export default router;
