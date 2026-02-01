@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+import path from "path";
+
 const nextConfig = {
     transpilePackages: ['@repo/db'],
     typescript: {
@@ -15,6 +17,10 @@ const nextConfig = {
                 hostname: 'placehold.co',
             }
         ],
+    },
+    webpack: (config) => {
+        config.resolve.alias['@repo/db'] = path.join(process.cwd(), '../../packages/db/src/index.ts');
+        return config;
     },
 };
 
