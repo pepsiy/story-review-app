@@ -8,10 +8,16 @@
         "skipLibCheck": true,
         "outDir": "./dist",
         "rootDir": "./src",
-        "moduleResolution": "node"
+        "moduleResolution": "node",
+        "paths": {
+            "@repo/db": [
+                "../../packages/db/src/index.ts"
+            ]
+        }
     },
     "include": [
-        "src/**/*"
+        "src/**/*",
+        "../../packages/db/src/**/*"
     ],
     "exclude": [
         "node_modules"
