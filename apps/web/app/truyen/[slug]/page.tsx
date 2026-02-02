@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { LikeButton } from "@/components/LikeButton";
+import { ViewTracker } from "@/components/ViewTracker";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;
@@ -157,6 +158,7 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ slu
 
                 </div>
 
+                <ViewTracker workId={work.id} />
             </main>
         </div>
     );

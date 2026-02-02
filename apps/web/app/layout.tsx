@@ -51,6 +51,8 @@ const outfit = Outfit({
   display: "swap",
 });
 
+import NextTopLoader from "nextjs-toploader";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -68,6 +70,7 @@ export default async function RootLayout({
       <body
         className={`${roboto.variable} ${geistSans.variable} ${geistMono.variable} ${outfit.variable} antialiased`}
       >
+        <NextTopLoader color="#2563eb" showSpinner={false} />
         <Header />
         {children}
         <Footer />

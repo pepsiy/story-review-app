@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createWork, getWorks, createChapter, getWorkById, updateWork, deleteWork, updateChapter, deleteChapter } from "../controllers/adminController";
+import { createWork, getWorks, createChapter, getWorkById, updateWork, deleteWork, updateChapter, deleteChapter, incrementWorkView } from "../controllers/adminController";
 
 const router = Router();
 
@@ -9,6 +9,7 @@ router.get("/works", getWorks);
 router.get("/works/:id", getWorkById);
 router.put("/works/:id", updateWork);
 router.delete("/works/:id", deleteWork);
+router.post("/works/:id/view", incrementWorkView);
 
 // Chapter Routes
 router.post("/chapters", createChapter);

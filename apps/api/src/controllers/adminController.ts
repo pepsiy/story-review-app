@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, sql } from "drizzle-orm";
 import { db } from "../../../../packages/db/src";
 import { works, chapters, genres, systemSettings } from "../../../../packages/db/src";
 
@@ -121,6 +121,20 @@ export const deleteWork = async (req: Request, res: Response) => {
         res.json({ message: "Work deleted successfully" });
     } catch (error) {
         console.error("Error deleting work:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+export const incrementWorkView = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        await db.update(works)
+            .set({ views: sql`${works.views} + 1` })
+            .where(eq(works.id, parseInt(id)));
+
+        res.status(200).json({ message: "View incremented" });
+    } catch (error) {
+        console.error("Error incrementing view:", error);
         res.status(500).json({ error: "Internal Server Error" });
     }
 };
