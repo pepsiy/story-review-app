@@ -39,4 +39,8 @@ import { getGameItems, updateGameItem } from "../controllers/adminController";
 router.get("/game-items", getGameItems);
 router.post("/game-items/:id", updateGameItem); // POST for Upsert
 
+// Stats Routes
+import { getStats } from "../controllers/statsController";
+router.get("/stats", getStats);
+
 export default router;

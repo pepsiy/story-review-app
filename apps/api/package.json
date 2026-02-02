@@ -6,7 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/apps/api/src/index.js",
-    "seed": "tsx src/seed.ts"
+    "seed": "tsx src/seed.ts",
+    "reset": "tsx src/reset.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

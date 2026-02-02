@@ -55,6 +55,7 @@ const outfit = Outfit({
 });
 
 import NextTopLoader from "nextjs-toploader";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 
 export default async function RootLayout({
   children,
@@ -68,11 +69,14 @@ export default async function RootLayout({
     console.warn("⚠️ Auth failed during build (safe to ignore):", e);
   }
 
+  const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+
   return (
     <html lang="vi">
       <body
         className={`${roboto.variable} ${geistSans.variable} ${geistMono.variable} ${outfit.variable} antialiased`}
       >
+        <GoogleAnalytics measurementId={gaId} />
         <Providers>
           <NextTopLoader color="#2563eb" showSpinner={false} />
           <Header />
