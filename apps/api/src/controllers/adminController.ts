@@ -1,7 +1,5 @@
-import { Request, Response } from "express";
-import { db } from "@repo/db";
-import { works, chapters, genres, systemSettings } from "@repo/db";
-import { eq, desc, asc, sql } from "drizzle-orm";
+import { db } from "../../../../packages/db/src";
+import { works, chapters, genres, systemSettings } from "../../../../packages/db/src";
 
 // --- Works ---
 

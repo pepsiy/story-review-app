@@ -1,7 +1,7 @@
 
 import "dotenv/config";
-import { db } from "@repo/db";
-import { works } from "@repo/db";
+import { db } from "../../../packages/db/src";
+import { works } from "../../../packages/db/src";
 import { eq } from "drizzle-orm";
 
 async function main() {

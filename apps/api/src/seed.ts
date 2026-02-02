@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { db } from "@repo/db";
-import { works, chapters } from "@repo/db";
+import { db } from "../../../packages/db/src";
+import { works, chapters } from "../../../packages/db/src";
 
 async function main() {
     console.log("🌱 Seeding database...");

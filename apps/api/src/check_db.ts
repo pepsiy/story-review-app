@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { db } from "@repo/db";
+import { db } from "../../../packages/db/src";
 import { works } from "@repo/db";
 
 async function main() {

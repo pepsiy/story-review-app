@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { db, systemSettings } from "@repo/db";
+import { db, systemSettings } from "../../../../packages/db/src";
 import { eq } from "drizzle-orm";
 
 // Load keys from DB or Env
