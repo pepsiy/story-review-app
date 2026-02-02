@@ -230,30 +230,6 @@ export const farmPlots = pgTable('farm_plots', {
     };
 });
 
-// Bảng Định nghĩa Vật phẩm Game (Dynamic Config)
-export const gameItems = pgTable('game_items', {
-    id: text('id').primaryKey(), // 'seed_linh_thao'
-    name: text('name').notNull(),
-    description: text('description'),
-    type: text('type').notNull(), // 'SEED', 'PRODUCT', 'CONSUMABLE'
-
-    // Config values
-    price: integer('price').default(0), // Giá mua
-    sellPrice: integer('sell_price').default(0), // Giá bán
-    growTime: integer('grow_time').default(0), // Thời gian trồng (giây)
-    exp: integer('exp').default(0), // Exp nhận được (khi trồng hoặc dùng)
-
-    // Yield (Harvest Quantity)
-    minYield: integer('min_yield').default(1),
-    maxYield: integer('max_yield').default(1),
-
-    // Visual
-    icon: text('icon'), // Emoji or URL
-
-    // Recipe (cho Luyện đan) - JSON Array: [{ "itemId": "herb_a", "quantity": 10 }]
-    ingredients: text('ingredients'), // JSON stringified
-});
-
 export const usersRelations = relations(users, ({ many }) => ({
     comments: many(comments),
     chatMessages: many(chatMessages),

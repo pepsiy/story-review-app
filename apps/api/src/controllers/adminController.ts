@@ -337,3 +337,51 @@ export const updateSettings = async (req: Request, res: Response) => {
         res.status(500).json({ error: error.message || "Internal Server Error" });
     }
 };
+
+// --- Game Items ---
+
+import { gameItems } from "../../../../packages/db/src";
+
+export const getGameItems = async (req: Request, res: Response) => {
+    try {
+        const items = await db.select().from(gameItems).orderBy(gameItems.id);
+        res.json(items);
+    } catch (error: any) {
+        console.error("Error fetching game items:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+export const updateGameItem = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { name, type, price, sellPrice, growTime, exp, minYield, maxYield, icon, ingredients, description } = req.body;
+
+        // Check if item exists
+        const existing = await db.query.gameItems.findFirst({ where: eq(gameItems.id, id) });
+
+        if (existing) {
+            // Update
+            const updated = await db.update(gameItems)
+                .set({
+                    name, type, price, sellPrice, growTime, exp, minYield, maxYield, icon, ingredients, description
+                })
+                .where(eq(gameItems.id, id))
+                .returning();
+            res.json(updated[0]);
+        } else {
+            // Create (if not exist, allow creating via "update" endpoint for simplicity or semantic POST)
+            // But let's create a separate create route or just usage upsert if ID provided.
+            const newItem = await db.insert(gameItems)
+                .values({
+                    id, // ID is manual string e.g., 'seed_new'
+                    name, type, price, sellPrice, growTime, exp, minYield, maxYield, icon, ingredients, description
+                })
+                .returning();
+            res.status(201).json(newItem[0]);
+        }
+    } catch (error: any) {
+        console.error("Error updating/creating game item:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};

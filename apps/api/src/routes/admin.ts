@@ -34,4 +34,9 @@ router.delete("/genres/:id", deleteGenre);
 router.get("/settings", getSettings);
 router.post("/settings", updateSettings);
 
+// Game Item Routes
+import { getGameItems, updateGameItem } from "../controllers/adminController";
+router.get("/game-items", getGameItems);
+router.post("/game-items/:id", updateGameItem); // POST for Upsert
+
 export default router;

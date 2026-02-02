@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins } from "lucide-react";
+import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap } from "lucide-react";
 
 // Types
 type Plot = {
@@ -15,7 +15,7 @@ type Plot = {
     plantedAt: string | null;
 };
 
-type Item = {
+type InventoryItem = {
     id: number;
     itemId: string;
     quantity: number;
@@ -32,22 +32,19 @@ type UserState = {
 type GameState = {
     user: UserState;
     plots: Plot[];
-    inventory: Item[];
+    inventory: InventoryItem[];
+    itemsDef?: any;
 };
 
 // --- Game Data (Mirrored from Backend for UI) ---
-const ITEMS_DEF: any = {
-    'seed_linh_thao': { name: 'Hạt Linh Thảo', icon: '🌿', growTime: 60, price: 10 },
-    'seed_nhan_sam': { name: 'Hạt Nhân Sâm', icon: '🥕', growTime: 300, price: 50 },
-    'herb_linh_thao': { name: 'Linh Thảo', icon: '🍃', sellPrice: 15 },
-    'herb_nhan_sam': { name: 'Nhân Sâm', icon: '🥕', sellPrice: 80 },
-};
+// Note: Now fetched dynamically from API
+
 
 export default function GameClient() {
     const { data: session } = useSession();
     const [loading, setLoading] = useState(true);
     const [state, setState] = useState<GameState | null>(null);
-    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP'>('FARM');
+    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY'>('FARM');
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -148,6 +145,42 @@ export default function GameClient() {
         } catch (e) { toast.error("Lỗi kết nối"); }
     };
 
+    const craftItem = async (itemId: string) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/craft`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, itemId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+                fetchState();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const useItem = async (itemId: string) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/use`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, itemId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+                fetchState();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
     if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin" /></div>;
     if (!session) return <div className="text-center p-10">Vui lòng đăng nhập để chơi game!</div>;
     if (!state) return <div className="text-center p-10">Lỗi tải dữ liệu game.</div>;
@@ -166,11 +199,14 @@ export default function GameClient() {
                     <span className="text-xs text-stone-200 mb-2">Đất Trống</span>
                     {seedInventory.length > 0 ? (
                         <div className="grid grid-cols-2 gap-1 p-1">
-                            {seedInventory.map(seed => (
-                                <button key={seed.itemId} onClick={() => plantSeed(plot.id, seed.itemId)} className="bg-green-600 hover:bg-green-700 text-white text-[10px] p-1 rounded">
-                                    Gieo {ITEMS_DEF[seed.itemId]?.name}
-                                </button>
-                            ))}
+                            {seedInventory.map(seed => {
+                                const def = state.itemsDef?.[seed.itemId];
+                                return (
+                                    <button key={seed.itemId} onClick={() => plantSeed(plot.id, seed.itemId)} className="bg-green-600 hover:bg-green-700 text-white text-[10px] p-1 rounded">
+                                        Gieo {def?.name || seed.itemId}
+                                    </button>
+                                );
+                            })}
                         </div>
                     ) : (
                         <span className="text-[10px] text-stone-400">Hết hạt giống</span>
@@ -179,8 +215,8 @@ export default function GameClient() {
             );
         }
 
-        const seedDef = ITEMS_DEF[plot.seedId];
-        const growTimeMs = seedDef?.growTime * 1000 || 0;
+        const seedDef = state.itemsDef?.[plot.seedId];
+        const growTimeMs = (seedDef?.growTime || 60) * 1000;
         const elapsed = plot.plantedAt ? Date.now() - new Date(plot.plantedAt).getTime() : 0;
         const progress = Math.min(100, (elapsed / growTimeMs) * 100);
         const isReady = progress >= 100;
@@ -249,7 +285,13 @@ export default function GameClient() {
                         onClick={() => setActiveTab('SHOP')}
                         className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'SHOP' ? 'bg-white text-blue-700 shadow-sm' : 'bg-blue-800/10 text-blue-800 hover:bg-blue-800/20'}`}
                     >
-                        <ShoppingBag className="w-4 h-4" /> Thị Trấn (Shop)
+                        <ShoppingBag className="w-4 h-4" /> Thị Trấn
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('ALCHEMY')}
+                        className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'ALCHEMY' ? 'bg-white text-purple-700 shadow-sm' : 'bg-purple-800/10 text-purple-800 hover:bg-purple-800/20'}`}
+                    >
+                        <FlaskConical className="w-4 h-4" /> Luyện Đan
                     </button>
                 </div>
 
@@ -273,31 +315,45 @@ export default function GameClient() {
                                     <p className="text-slate-400 italic text-sm">Túi trống rỗng...</p>
                                 ) : (
                                     <div className="space-y-2">
-                                        {state.inventory.map(item => (
-                                            <div key={item.id} className="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-slate-100">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xl">{ITEMS_DEF[item.itemId]?.icon || '📦'}</span>
-                                                    <div>
-                                                        <div className="font-medium text-sm text-slate-800">{ITEMS_DEF[item.itemId]?.name || item.itemId}</div>
-                                                        <div className="text-xs text-slate-400">{item.type}</div>
+                                        {state.inventory.map(item => {
+                                            const def = state.itemsDef?.[item.itemId] || {};
+                                            return (
+                                                <div key={item.id} className="flex justify-between items-center bg-white p-2 rounded shadow-sm border border-slate-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xl">{def.icon || '📦'}</span>
+                                                        <div>
+                                                            <div className="font-medium text-sm text-slate-800">{def.name || item.itemId}</div>
+                                                            <div className="text-xs text-slate-400">{item.type}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono font-bold text-slate-600">x{item.quantity}</span>
+                                                        {def.sellPrice && (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="icon"
+                                                                className="h-6 w-6 text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+                                                                title={`Bán lấy ${def.sellPrice} Vàng`}
+                                                                onClick={() => sellItem(item.itemId)}
+                                                            >
+                                                                $
+                                                            </Button>
+                                                        )}
+                                                        {item.type === 'CONSUMABLE' && (
+                                                            <Button
+                                                                variant="default"
+                                                                size="icon"
+                                                                className="h-6 w-6 bg-blue-500 hover:bg-blue-600 text-white"
+                                                                title="Sử dụng (Tăng Exp)"
+                                                                onClick={() => useItem(item.itemId)}
+                                                            >
+                                                                <Zap className="w-3 h-3" />
+                                                            </Button>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono font-bold text-slate-600">x{item.quantity}</span>
-                                                    {ITEMS_DEF[item.itemId]?.sellPrice && (
-                                                        <Button
-                                                            variant="outline"
-                                                            size="icon"
-                                                            className="h-6 w-6 text-yellow-600 border-yellow-200 hover:bg-yellow-50"
-                                                            title={`Bán lấy ${ITEMS_DEF[item.itemId].sellPrice} Vàng`}
-                                                            onClick={() => sellItem(item.itemId)}
-                                                        >
-                                                            $
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -308,23 +364,69 @@ export default function GameClient() {
                         <div>
                             <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><ShoppingBag className="w-4 h-4" /> Tạp Hóa Thị Trấn</h3>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                {Object.entries(ITEMS_DEF).map(([key, def]: any) => (
-                                    def.price ? (
-                                        <div key={key} className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow">
-                                            <div className="text-4xl mb-2">{def.icon}</div>
-                                            <div className="font-bold text-sm text-slate-800 mb-1">{def.name}</div>
-                                            <div className="text-xs text-slate-500 mb-3 bg-blue-50 px-2 py-0.5 rounded text-blue-600">Thời gian: {def.growTime}s</div>
+                                {Object.values(state.itemsDef || {}).filter((def: any) => def.price > 0).map((def: any) => (
+                                    <div key={def.id} className="bg-slate-50 border border-slate-200 rounded-lg p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                                        <div className="text-4xl mb-2">{def.icon}</div>
+                                        <div className="font-bold text-sm text-slate-800 mb-1">{def.name}</div>
+                                        {def.type === 'SEED' && <div className="text-xs text-slate-500 mb-3 bg-blue-50 px-2 py-0.5 rounded text-blue-600">Thời gian: {def.growTime}s</div>}
+                                        {def.description && <div className="text-[10px] text-slate-400 mb-2 italic">{def.description}</div>}
 
-                                            <Button
-                                                variant="default"
-                                                size="sm"
-                                                className="w-full bg-yellow-500 hover:bg-yellow-600 text-white"
-                                                onClick={() => buyItem(key)}
-                                            >
-                                                Mua ({def.price} Vàng)
-                                            </Button>
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            className="w-full bg-yellow-500 hover:bg-yellow-600 text-white"
+                                            onClick={() => buyItem(def.id)}
+                                        >
+                                            Mua ({def.price} Vàng)
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'ALCHEMY' && (
+                        <div>
+                            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><FlaskConical className="w-4 h-4" /> Lò Luyện Đan</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {Object.values(state.itemsDef || {}).filter((def: any) => def.ingredients && def.ingredients.length > 0).map((recipe: any) => (
+                                    <div key={recipe.id} className="bg-purple-50 border border-purple-200 rounded-lg p-4 flex flex-col items-center text-center relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 bg-purple-200 text-purple-800 text-xs px-2 py-1 rounded-bl">Cấp 1</div>
+                                        <div className="text-4xl mb-2">{recipe.icon}</div>
+                                        <div className="font-bold text-slate-800">{recipe.name}</div>
+                                        <div className="text-xs text-purple-600 mb-3">Tăng {recipe.exp} Exp</div>
+
+                                        <div className="w-full bg-white rounded p-2 mb-3 border border-purple-100 text-sm">
+                                            <div className="text-xs text-slate-500 mb-1">Nguyên Liệu:</div>
+                                            <div className="space-y-1">
+                                                {recipe.ingredients.map((ing: any) => {
+                                                    // Resolve ing definition
+                                                    const ingDef = state.itemsDef?.[ing.itemId];
+                                                    const userHas = state.inventory.find(i => i.itemId === ing.itemId)?.quantity || 0;
+                                                    const isEnough = userHas >= ing.quantity;
+                                                    return (
+                                                        <div key={ing.itemId} className="flex justify-between text-xs">
+                                                            <span>{ingDef?.name || ing.itemId}</span>
+                                                            <span className={isEnough ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
+                                                                {userHas}/{ing.quantity} {isEnough && <Check className="inline w-3 h-3" />}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                                <div className="flex justify-between text-xs mt-1 pt-1 border-t border-dashed border-slate-200">
+                                                    <span>Phí Luyện</span>
+                                                    <span className={state.user.gold >= 100 ? "text-yellow-600 font-bold" : "text-red-500 font-bold"}>100 Vàng</span>
+                                                </div>
+                                            </div>
                                         </div>
-                                    ) : null
+
+                                        <Button
+                                            className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                                            onClick={() => craftItem(recipe.id)}
+                                        >
+                                            <FlaskConical className="w-4 h-4 mr-1" /> Luyện Đan
+                                        </Button>
+                                    </div>
                                 ))}
                             </div>
                         </div>

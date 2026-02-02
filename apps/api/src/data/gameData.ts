@@ -14,7 +14,18 @@ export const ITEMS: Record<string, { id: string, name: string, type: string, pri
     'herb_nhan_sam': { id: 'herb_nhan_sam', name: 'Nhân Sâm', type: ITEM_TYPES.PRODUCT, sellPrice: 20, exp: 30 },
 
     // Pills
-    'pill_truc_co': { id: 'pill_truc_co', name: 'Trúc Cơ Đan', type: ITEM_TYPES.CONSUMABLE, price: 1000, exp: 500 },
+    'pill_truc_co': { id: 'pill_truc_co', name: 'Trúc Cơ Đan', type: ITEM_TYPES.CONSUMABLE, price: 1000, exp: 500, sellPrice: 200 },
+};
+
+// Recipes for Alchemy
+export const RECIPES: Record<string, { ingredients: { itemId: string, quantity: number }[], cost: number }> = {
+    'pill_truc_co': {
+        ingredients: [
+            { itemId: 'herb_linh_thao', quantity: 10 },
+            { itemId: 'herb_nhan_sam', quantity: 2 }
+        ],
+        cost: 100 // Cost 100 Gold to craft
+    }
 };
 
 export const CULTIVATION_LEVELS = [
