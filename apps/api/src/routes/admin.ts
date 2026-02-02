@@ -44,4 +44,24 @@ import { getStats, getTopWorks } from "../controllers/statsController";
 router.get("/stats", getStats);
 router.get("/top-works", getTopWorks);
 
+// Crawl Routes (Auto-Crawl System)
+import {
+    initCrawl,
+    processBatch,
+    getCrawlStatus,
+    toggleAutoMode,
+    pauseJob,
+    resumeJob,
+    getActiveJobs,
+    testTelegramConnection
+} from "../controllers/crawlController";
+router.post("/crawl/init", initCrawl);
+router.post("/crawl/:jobId/process-batch", processBatch);
+router.get("/crawl/:jobId/status", getCrawlStatus);
+router.post("/crawl/:jobId/toggle-auto", toggleAutoMode);
+router.post("/crawl/:jobId/pause", pauseJob);
+router.post("/crawl/:jobId/resume", resumeJob);
+router.get("/crawl/active", getActiveJobs);
+router.post("/telegram/test", testTelegramConnection);
+
 export default router;

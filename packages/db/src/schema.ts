@@ -313,6 +313,77 @@ export const friendships = pgTable('friendships', {
     };
 });
 
+// ==================== AUTO-CRAWL SYSTEM ====================
+
+// Bảng Crawl Jobs - Quản lý các công việc crawl
+export const crawlJobs = pgTable('crawl_jobs', {
+    id: serial('id').primaryKey(),
+    workId: integer('work_id').references(() => works.id, { onDelete: 'cascade' }),
+    sourceUrl: text('source_url').notNull(), // https://truyenfull.vision/tien-nghich
+
+    // Status
+    status: text('status').notNull().default('initializing'),
+    // 'initializing' | 'crawling' | 'ready' | 'processing' | 'paused' | 'completed' | 'failed'
+
+    // Progress
+    totalChapters: integer('total_chapters').default(0),
+    crawledChapters: integer('crawled_chapters').default(0),
+    summarizedChapters: integer('summarized_chapters').default(0),
+    failedChapters: integer('failed_chapters').default(0),
+
+    // Auto mode
+    autoMode: boolean('auto_mode').default(false),
+    batchSize: integer('batch_size').default(5),
+
+    // Timestamps
+    createdAt: timestamp('created_at').defaultNow(),
+    startedAt: timestamp('started_at'),
+    completedAt: timestamp('completed_at'),
+    lastProcessedAt: timestamp('last_processed_at'),
+
+    // Error tracking
+    lastError: text('last_error'),
+}, (table) => {
+    return {
+        workIdIdx: index('crawl_job_work_idx').on(table.workId),
+        statusIdx: index('crawl_job_status_idx').on(table.status),
+    };
+});
+
+// Bảng Crawl Chapters - Chi tiết từng chapter
+export const crawlChapters = pgTable('crawl_chapters', {
+    id: serial('id').primaryKey(),
+    jobId: integer('job_id').references(() => crawlJobs.id, { onDelete: 'cascade' }),
+    workId: integer('work_id').references(() => works.id, { onDelete: 'cascade' }),
+
+    // Chapter info
+    chapterNumber: integer('chapter_number').notNull(),
+    title: text('title'),
+    sourceUrl: text('source_url').notNull(),
+
+    // Content
+    rawContent: text('raw_content'), // HTML content đã crawl
+    summary: text('summary'), // AI summary
+
+    // Status
+    status: text('status').notNull().default('pending'),
+    // 'pending' | 'crawling' | 'crawled' | 'summarizing' | 'completed' | 'failed'
+
+    // Error handling
+    retryCount: integer('retry_count').default(0),
+    error: text('error'),
+
+    // Timestamps
+    createdAt: timestamp('created_at').defaultNow(),
+    crawledAt: timestamp('crawled_at'),
+    summarizedAt: timestamp('summarized_at'),
+}, (table) => {
+    return {
+        jobChapterIdx: index('crawl_chapter_job_idx').on(table.jobId, table.chapterNumber),
+        statusIdx: index('crawl_chapter_status_idx').on(table.status),
+    };
+});
+
 export const usersRelations = relations(users, ({ many }) => ({
     comments: many(comments),
     chatMessages: many(chatMessages),

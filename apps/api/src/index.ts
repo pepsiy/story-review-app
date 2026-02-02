@@ -65,7 +65,26 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-server.listen(port, () => {
+// Initialize services
+import { telegramService } from "./services/telegramService";
+import { startCrawlCron } from "./services/crawlCron";
+
+async function initializeServices() {
+  console.log("🔧 Initializing services...");
+
+  // Initialize Telegram bot
+  await telegramService.initialize();
+
+  // Start cron job for auto-crawl
+  startCrawlCron();
+
+  console.log("✅ All services initialized");
+}
+
+server.listen(port, async () => {
   console.log(`Server running on port ${port} (Socket.io ready)`);
   console.log(`Last updated: ${new Date().toLocaleTimeString()}`);
+
+  // Initialize services after server starts
+  await initializeServices();
 });
