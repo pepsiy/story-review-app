@@ -17,4 +17,10 @@ router.post("/missions", getMissions);
 router.post("/missions/accept", acceptMission);
 router.post("/missions/complete", completeMission);
 
+// Social Routes (Visit Farm, Water, Steal)
+import { getOtherUserFarm, waterPlant, stealHarvest } from "../controllers/socialController";
+router.post("/visit-farm", getOtherUserFarm);
+router.post("/water", waterPlant);
+router.post("/steal", stealHarvest);
+
 export default router;

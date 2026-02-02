@@ -295,6 +295,24 @@ export const userMissions = pgTable('user_missions', {
     };
 });
 
+// Bảng Hảo Cảm / Quan Hệ Xã Hội (Friendship)
+export const friendships = pgTable('friendships', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    targetUserId: text('target_user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+    friendshipLevel: integer('friendship_level').default(0), // Hảo cảm
+    lastInteraction: timestamp('last_interaction').defaultNow(),
+
+    // Counters
+    waterCount: integer('water_count').default(0), // Số lần tưới
+    stealCount: integer('steal_count').default(0), // Số lần trộm
+}, (table) => {
+    return {
+        userTargetIdx: index('user_target_idx').on(table.userId, table.targetUserId),
+    };
+});
+
 export const usersRelations = relations(users, ({ many }) => ({
     comments: many(comments),
     chatMessages: many(chatMessages),
