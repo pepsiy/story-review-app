@@ -47,10 +47,11 @@ export default function AdminSettingsPage() {
             if (res.ok) {
                 alert("Đã lưu cấu hình thành công! ✅");
             } else {
-                alert("Lỗi khi lưu cấu hình!");
+                const data = await res.json();
+                alert(`Lỗi: ${data.error || "Không thể lưu cấu hình"}`);
             }
-        } catch (error) {
-            alert("Lỗi kết nối server!");
+        } catch (error: any) {
+            alert(`Lỗi kết nối: ${error.message}`);
         } finally {
             setSaving(false);
         }

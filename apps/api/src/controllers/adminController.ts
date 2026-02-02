@@ -289,3 +289,37 @@ export const deleteGenre = async (req: Request, res: Response) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 };
+
+// --- Settings ---
+
+export const getSettings = async (req: Request, res: Response) => {
+    try {
+        const settings = await db.select().from(systemSettings);
+        res.json(settings);
+    } catch (error) {
+        console.error("Error fetching settings:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+export const updateSettings = async (req: Request, res: Response) => {
+    try {
+        const settingsToUpdate = req.body; // Expect { "GEMINI_API_KEY": "value" }
+
+        for (const [key, value] of Object.entries(settingsToUpdate)) {
+            if (typeof value === 'string') {
+                await db.insert(systemSettings)
+                    .values({ key, value })
+                    .onConflictDoUpdate({
+                        target: systemSettings.key,
+                        set: { value, updatedAt: new Date() }
+                    });
+            }
+        }
+
+        res.json({ message: "Settings updated successfully" });
+    } catch (error: any) {
+        console.error("Error updating settings:", error);
+        res.status(500).json({ error: error.message || "Internal Server Error" });
+    }
+};
