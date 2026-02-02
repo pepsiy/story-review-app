@@ -103,6 +103,32 @@ async function main() {
     ]);
     console.log("✅ Seeded Game Items");
 
+    // 4. Seed Missions (Optional - can be done in Admin later, but good for starting)
+    // Only insert if not exist to avoid overwriting edits
+    /*
+    await db.insert(missions).values([
+        {
+            title: "Thu thập Linh Thảo",
+            description: "Tông môn đang cần 10 cây Linh Thảo để luyện đan.",
+            type: "COLLECT",
+            requiredItemId: "herb_linh_thao",
+            requiredQuantity: 10,
+            rewardGold: 100,
+            rewardExp: 50
+        },
+        {
+            title: "Cống nạp Nhân Sâm",
+            description: "Đại trưởng lão cần Nhân Sâm để bồi bổ.",
+            type: "COLLECT",
+            requiredItemId: "herb_nhan_sam",
+            requiredQuantity: 5,
+            rewardGold: 500,
+            rewardExp: 200
+        }
+    ]);
+    console.log("✅ Seeded Initial Missions");
+    */
+
     console.log("🎉 Seeding completed!");
     process.exit(0);
 }

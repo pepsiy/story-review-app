@@ -29,6 +29,27 @@ type UserState = {
     cultivationExp: number;
 };
 
+type Mission = {
+    id: number;
+    title: string;
+    description?: string;
+    type: string;
+    requiredItemId?: string;
+    requiredQuantity?: number;
+    rewardGold: number;
+    rewardExp: number;
+};
+
+type UserMission = {
+    id: number;
+    userId: string;
+    missionId: number;
+    status: string;
+    progress: number;
+    startedAt: string;
+    completedAt?: string;
+};
+
 type GameState = {
     user: UserState;
     plots: Plot[];
@@ -44,7 +65,9 @@ export default function GameClient() {
     const { data: session } = useSession();
     const [loading, setLoading] = useState(true);
     const [state, setState] = useState<GameState | null>(null);
-    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY'>('FARM');
+    const [missions, setMissions] = useState<Mission[]>([]);
+    const [userMissions, setUserMissions] = useState<UserMission[]>([]);
+    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS'>('FARM');
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -67,8 +90,29 @@ export default function GameClient() {
         }
     };
 
+    const fetchMissions = async () => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/missions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id })
+            });
+            const data = await res.json();
+            if (data.missions) {
+                setMissions(data.missions);
+                setUserMissions(data.userMissions || []);
+            }
+        } catch (e) {
+            console.error("Fetch Missions Error", e);
+        }
+    };
+
     useEffect(() => {
-        if (session?.user?.id) fetchState();
+        if (session?.user?.id) {
+            fetchState();
+            fetchMissions();
+        }
     }, [session]);
 
     // --- Actions ---
@@ -175,6 +219,43 @@ export default function GameClient() {
             if (res.ok) {
                 toast.success(data.message);
                 fetchState();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const acceptMission = async (missionId: number) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/missions/accept`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, missionId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success("Đã nhận nhiệm vụ!");
+                fetchMissions();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const completeMission = async (missionId: number) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/missions/complete`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, missionId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+                fetchState();
+                fetchMissions();
             } else {
                 toast.error(data.error);
             }
@@ -292,6 +373,12 @@ export default function GameClient() {
                         className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'ALCHEMY' ? 'bg-white text-purple-700 shadow-sm' : 'bg-purple-800/10 text-purple-800 hover:bg-purple-800/20'}`}
                     >
                         <FlaskConical className="w-4 h-4" /> Luyện Đan
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('MISSIONS')}
+                        className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'MISSIONS' ? 'bg-white text-orange-700 shadow-sm' : 'bg-orange-800/10 text-orange-800 hover:bg-orange-800/20'}`}
+                    >
+                        📜 Bảng Cáo Thị
                     </button>
                 </div>
 
@@ -428,6 +515,91 @@ export default function GameClient() {
                                         </Button>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'MISSIONS' && (
+                        <div className="space-y-6">
+                            <h3 className="font-bold text-slate-700 text-lg mb-4">📜 Bảng Cáo Thị Tông Môn</h3>
+
+                            {/* Active Missions */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-orange-700 mb-2">Nhiệm Vụ Đang Thực Hiện</h4>
+                                {userMissions.filter(um => um.status === 'IN_PROGRESS').length === 0 ? (
+                                    <p className="text-slate-400 text-sm italic">Chưa nhận nhiệm vụ nào.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {userMissions
+                                            .filter(um => um.status === 'IN_PROGRESS')
+                                            .map(um => {
+                                                const mission = missions.find(m => m.id === um.missionId);
+                                                if (!mission) return null;
+
+                                                const userItem = state.inventory.find(inv => inv.itemId === mission.requiredItemId);
+                                                const canComplete = userItem && userItem.quantity >= (mission.requiredQuantity || 1);
+
+                                                return (
+                                                    <div key={um.id} className="border border-orange-200 bg-orange-50/30 rounded-lg p-4">
+                                                        <div className="flex justify-between items-start mb-2">
+                                                            <div>
+                                                                <h5 className="font-bold text-slate-800">{mission.title}</h5>
+                                                                <p className="text-xs text-slate-600 mt-1">{mission.description}</p>
+                                                            </div>
+                                                            {canComplete && <Check className="w-5 h-5 text-green-600" />}
+                                                        </div>
+                                                        <div className="text-xs text-slate-700 bg-white/50 p-2 rounded mb-2">
+                                                            Yêu cầu: <span className="font-mono">{mission.requiredQuantity} {mission.requiredItemId}</span>
+                                                            <br />
+                                                            Hiện có: <span className={`font-mono ${canComplete ? 'text-green-600' : 'text-red-600'}`}>{userItem?.quantity || 0}</span>
+                                                        </div>
+                                                        <div className="text-xs text-slate-600 bg-yellow-50 p-2 rounded mb-3">
+                                                            Thưởng: <span className="text-yellow-600 font-bold">{mission.rewardGold} Vàng</span> + <span className="text-blue-600 font-bold">{mission.rewardExp} Exp</span>
+                                                        </div>
+                                                        <Button
+                                                            variant={canComplete ? "default" : "secondary"}
+                                                            className="w-full"
+                                                            disabled={!canComplete}
+                                                            onClick={() => completeMission(mission.id)}
+                                                        >
+                                                            {canComplete ? "✅ Nộp Nhiệm Vụ" : "⏳ Chưa đủ vật phẩm"}
+                                                        </Button>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Available Missions */}
+                            <div>
+                                <h4 className="text-sm font-semibold text-orange-700 mb-2">Nhiệm Vụ Khả Dụng</h4>
+                                {missions.filter(m => !userMissions.find(um => um.missionId === m.id)).length === 0 ? (
+                                    <p className="text-slate-400 text-sm italic">Không có nhiệm vụ mới.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {missions
+                                            .filter(m => !userMissions.find(um => um.missionId === m.id))
+                                            .map(mission => (
+                                                <div key={mission.id} className="border border-slate-200 bg-white rounded-lg p-4 hover:shadow-md transition-shadow">
+                                                    <h5 className="font-bold text-slate-800">{mission.title}</h5>
+                                                    <p className="text-xs text-slate-600 mt-1 mb-3">{mission.description}</p>
+                                                    <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded mb-2">
+                                                        Yêu cầu: <span className="font-mono">{mission.requiredQuantity} {mission.requiredItemId}</span>
+                                                    </div>
+                                                    <div className="text-xs text-slate-600 bg-yellow-50 p-2 rounded mb-3">
+                                                        Thưởng: <span className="text-yellow-600 font-bold">{mission.rewardGold} Vàng</span> + <span className="text-blue-600 font-bold">{mission.rewardExp} Exp</span>
+                                                    </div>
+                                                    <Button
+                                                        className="w-full bg-orange-600 hover:bg-orange-700"
+                                                        onClick={() => acceptMission(mission.id)}
+                                                    >
+                                                        Nhận Nhiệm Vụ
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

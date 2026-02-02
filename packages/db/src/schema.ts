@@ -254,6 +254,47 @@ export const gameItems = pgTable('game_items', {
     ingredients: text('ingredients'), // JSON stringified
 });
 
+// Bảng Nhiệm Vụ (Mission/Quest Definitions)
+export const missions = pgTable('missions', {
+    id: serial('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description'),
+
+    // Requirements
+    minCultivation: text('min_cultivation'), // e.g., 'Phàm Nhân'
+
+    // Type: 'COLLECT' (nộp vật phẩm), 'HUNT' (chưa có), 'SYSTEM' (đăng nhập)
+    type: text('type').default('COLLECT').notNull(),
+
+    // Config for COLLECT
+    requiredItemId: text('required_item_id'),
+    requiredQuantity: integer('required_quantity').default(1),
+
+    // Rewards
+    rewardGold: integer('reward_gold').default(0),
+    rewardExp: integer('reward_exp').default(0),
+    rewardItems: text('reward_items'), // JSON: [{ "itemId": "pill_x", "quantity": 1 }]
+
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Bảng Theo dõi Nhiệm vụ người dùng (User Missions)
+export const userMissions = pgTable('user_missions', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    missionId: integer('mission_id').references(() => missions.id, { onDelete: 'cascade' }).notNull(),
+
+    status: text('status').default('IN_PROGRESS'), // IN_PROGRESS, COMPLETED, FAILED
+    progress: integer('progress').default(0), // Count for collection/kills
+
+    startedAt: timestamp('started_at').defaultNow(),
+    completedAt: timestamp('completed_at'),
+}, (table) => {
+    return {
+        userMissionIdx: index('user_mission_idx').on(table.userId, table.status),
+    };
+});
+
 export const usersRelations = relations(users, ({ many }) => ({
     comments: many(comments),
     chatMessages: many(chatMessages),

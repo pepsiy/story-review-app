@@ -11,4 +11,10 @@ router.post("/sell", sellItem);
 router.post("/craft", craftItem);
 router.post("/use", useItem);
 
+// Mission Routes
+import { getMissions, acceptMission, completeMission } from "../controllers/missionController";
+router.post("/missions", getMissions);
+router.post("/missions/accept", acceptMission);
+router.post("/missions/complete", completeMission);
+
 export default router;
