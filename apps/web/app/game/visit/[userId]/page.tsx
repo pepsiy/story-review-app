@@ -74,7 +74,7 @@ export default function VisitFarmPage() {
             const res = await fetch(`${API_URL}/game/water`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId: session.user.id, targetUserId target, plotId })
+                body: JSON.stringify({ userId: session.user.id, targetUserId, plotId })
             });
             const data = await res.json();
             if (res.ok) {
