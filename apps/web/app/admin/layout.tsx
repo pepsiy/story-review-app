@@ -52,6 +52,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     <Link href="/admin/settings" className="block px-4 py-2 rounded hover:bg-indigo-50 text-gray-700 font-medium">
                         ⚙️ Cấu hình
                     </Link>
+                    <Link href="/admin/game" className="block px-4 py-2 rounded hover:bg-indigo-50 text-gray-700 font-medium">
+                        🎮 Quản lý Game
+                    </Link>
                     <div className="pt-4 border-t mt-4">
                         <Button
                             variant="ghost"
