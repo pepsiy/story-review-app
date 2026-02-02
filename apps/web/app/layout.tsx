@@ -46,6 +46,8 @@ import { ChatPopup } from "@/components/ChatPopup";
 import { auth } from "@/auth";
 import { Toaster } from "sonner";
 
+import { Providers } from "@/components/Providers";
+
 const outfit = Outfit({
   variable: "--font-outfit",
   subsets: ["latin"],
@@ -71,12 +73,14 @@ export default async function RootLayout({
       <body
         className={`${roboto.variable} ${geistSans.variable} ${geistMono.variable} ${outfit.variable} antialiased`}
       >
-        <NextTopLoader color="#2563eb" showSpinner={false} />
-        <Header />
-        {children}
-        <Toaster />
-        <Footer />
-        <ChatPopup user={session?.user} />
+        <Providers>
+          <NextTopLoader color="#2563eb" showSpinner={false} />
+          <Header />
+          {children}
+          <Toaster />
+          <Footer />
+          <ChatPopup user={session?.user} />
+        </Providers>
       </body>
     </html>
   );
