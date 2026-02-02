@@ -188,3 +188,48 @@ export const buyItem = async (req: Request, res: Response) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+export const sellItem = async (req: Request, res: Response) => {
+    try {
+        const { userId, itemId, quantity } = req.body;
+        const qty = quantity || 1;
+
+        const itemDef = ITEMS[itemId];
+        // Only allow selling PRODUCT or CONSUMABLE, not seeds (optional logic)
+        if (!itemDef || !itemDef.sellPrice) return res.status(400).json({ error: "Item cannot be sold" });
+
+        const totalValue = itemDef.sellPrice * qty;
+
+        // Check Inventory
+        const inventoryItem = await db.query.inventory.findFirst({
+            where: and(eq(inventory.userId, userId), eq(inventory.itemId, itemId))
+        });
+
+        if (!inventoryItem || inventoryItem.quantity < qty) {
+            return res.status(400).json({ error: "Not enough items to sell" });
+        }
+
+        // Transaction
+        await db.transaction(async (tx) => {
+            // Deduct Item
+            if (inventoryItem.quantity === qty) {
+                await tx.delete(inventory).where(eq(inventory.id, inventoryItem.id));
+            } else {
+                await tx.update(inventory)
+                    .set({ quantity: inventoryItem.quantity - qty })
+                    .where(eq(inventory.id, inventoryItem.id));
+            }
+
+            // Add Gold
+            const user = await tx.query.users.findFirst({ where: eq(users.id, userId) });
+            await tx.update(users)
+                .set({ gold: (user?.gold || 0) + totalValue })
+                .where(eq(users.id, userId));
+        });
+
+        res.json({ message: `Sold ${qty} ${itemDef.name} for ${totalValue} Gold` });
+    } catch (error: any) {
+        console.error("Sell Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+};

@@ -39,8 +39,8 @@ type GameState = {
 const ITEMS_DEF: any = {
     'seed_linh_thao': { name: 'Hạt Linh Thảo', icon: '🌿', growTime: 60, price: 10 },
     'seed_nhan_sam': { name: 'Hạt Nhân Sâm', icon: '🥕', growTime: 300, price: 50 },
-    'herb_linh_thao': { name: 'Linh Thảo', icon: '🍃' },
-    'herb_nhan_sam': { name: 'Nhân Sâm', icon: '🥕' },
+    'herb_linh_thao': { name: 'Linh Thảo', icon: '🍃', sellPrice: 15 },
+    'herb_nhan_sam': { name: 'Nhân Sâm', icon: '🥕', sellPrice: 80 },
 };
 
 export default function GameClient() {
@@ -116,6 +116,24 @@ export default function GameClient() {
         if (!session?.user?.id) return;
         try {
             const res = await fetch(`${API_URL}/game/buy`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, itemId, quantity: qty })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+                fetchState();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const sellItem = async (itemId: string, qty: number = 1) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/sell`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userId: session.user.id, itemId, quantity: qty })
@@ -261,10 +279,23 @@ export default function GameClient() {
                                                     <span className="text-xl">{ITEMS_DEF[item.itemId]?.icon || '📦'}</span>
                                                     <div>
                                                         <div className="font-medium text-sm text-slate-800">{ITEMS_DEF[item.itemId]?.name || item.itemId}</div>
-                                                        <div className="text-xs text-slate-500">{item.type}</div>
+                                                        <div className="text-xs text-slate-400">{item.type}</div>
                                                     </div>
                                                 </div>
-                                                <span className="font-mono font-bold text-slate-600">x{item.quantity}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-mono font-bold text-slate-600">x{item.quantity}</span>
+                                                    {ITEMS_DEF[item.itemId]?.sellPrice && (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            className="h-6 w-6 text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+                                                            title={`Bán lấy ${ITEMS_DEF[item.itemId].sellPrice} Vàng`}
+                                                            onClick={() => sellItem(item.itemId)}
+                                                        >
+                                                            $
+                                                        </Button>
+                                                    )}
+                                                </div>
                                             </div>
                                         ))}
                                     </div>

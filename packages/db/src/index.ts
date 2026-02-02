@@ -1,8 +1,7 @@
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
+import { Pool } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
 import * as schema from './schema';
 
-// Sanitize connection string to support both pooled and direct urls
 // Sanitize connection string to support both pooled and direct urls
 const rawConnectionString = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
 
@@ -16,7 +15,7 @@ const connectionString = rawConnectionString || "postgresql://dummy:dummy@127.0.
 // Remove &channel_binding=require if present (causes error in serverless)
 const cleanConnectionString = connectionString.replace("&channel_binding=require", "");
 
-const sql = neon(cleanConnectionString);
-export const db = drizzle(sql as any, { schema });
+const pool = new Pool({ connectionString: cleanConnectionString });
+export const db = drizzle(pool, { schema });
 
 export * from './schema';
