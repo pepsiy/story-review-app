@@ -119,6 +119,9 @@ export const users = pgTable("user", {
     image: text("image"),
     bio: text("bio"), // Giới thiệu bản thân
     role: text("role").default("user"), // user | admin
+    gold: integer("gold").default(100), // Tiền tệ trong game
+    cultivationLevel: text("cultivation_level").default("Phàm Nhân"), // Cảnh giới: Phàm Nhân, Luyện Khí, Trúc Cơ...
+    cultivationExp: integer("cultivation_exp").default(0), // Điểm tu vi
 });
 
 export const accounts = pgTable(
@@ -196,6 +199,36 @@ export const favorites = pgTable('favorites', {
     };
 });
 
+
+
+// --- GAME SYSTEM ---
+
+// Bảng Kho đồ (Inventory)
+export const inventory = pgTable('inventory', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    itemId: text('item_id').notNull(), // 'seed_carrot', 'herb_linh_thao'
+    quantity: integer('quantity').default(0).notNull(),
+    type: text('type').notNull(), // 'SEED', 'PRODUCT', 'CONSUMABLE'
+}, (table) => {
+    return {
+        userItemIdx: index('user_item_idx').on(table.userId, table.itemId),
+    };
+});
+
+// Bảng Đất trồng (Farm Plots)
+export const farmPlots = pgTable('farm_plots', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    plotIndex: integer('plot_index').notNull(), // 0-8 (3x3 grid)
+    isUnlocked: boolean('is_unlocked').default(false),
+    seedId: text('seed_id'), // null = empty
+    plantedAt: timestamp('planted_at'), // null = not planted
+}, (table) => {
+    return {
+        userPlotIdx: index('user_plot_idx').on(table.userId, table.plotIndex),
+    };
+});
 
 export const usersRelations = relations(users, ({ many }) => ({
     comments: many(comments),

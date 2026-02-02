@@ -54,6 +54,9 @@ io.on("connection", (socket) => {
 // Routes
 app.use("/admin", adminRoutes);
 
+import gameRoutes from "./routes/game";
+app.use("/game", gameRoutes);
+
 app.get("/", (req, res) => {
   res.send("Story Review API is running (Admin Routes & Socket.io Available)!");
 });

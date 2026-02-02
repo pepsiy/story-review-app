@@ -44,6 +44,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ChatPopup } from "@/components/ChatPopup";
 import { auth } from "@/auth";
+import { Toaster } from "sonner";
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -73,6 +74,7 @@ export default async function RootLayout({
         <NextTopLoader color="#2563eb" showSpinner={false} />
         <Header />
         {children}
+        <Toaster />
         <Footer />
         <ChatPopup user={session?.user} />
       </body>
