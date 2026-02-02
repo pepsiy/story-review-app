@@ -40,7 +40,8 @@ router.get("/game-items", getGameItems);
 router.post("/game-items/:id", updateGameItem); // POST for Upsert
 
 // Stats Routes
-import { getStats } from "../controllers/statsController";
+import { getStats, getTopWorks } from "../controllers/statsController";
 router.get("/stats", getStats);
+router.get("/top-works", getTopWorks);
 
 export default router;

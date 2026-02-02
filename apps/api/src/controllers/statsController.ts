@@ -27,3 +27,21 @@ export const getStats = async (req: Request, res: Response) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 };
+
+export const getTopWorks = async (req: Request, res: Response) => {
+    try {
+        const topWorks = await db.select({
+            title: works.title,
+            slug: works.slug,
+            views: works.views
+        })
+            .from(works)
+            .orderBy(sql`${works.views} DESC`)
+            .limit(10);
+
+        res.json(topWorks);
+    } catch (error: any) {
+        console.error("Error fetching top works:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
