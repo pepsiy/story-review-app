@@ -11,7 +11,7 @@ import { summarizeChapter } from "../services/aiService";
  */
 export const initCrawl = async (req: Request, res: Response) => {
     try {
-        const { workId, sourceUrl } = req.body;
+        const { workId, sourceUrl, chaptersPerSummary, targetStartChapter, targetEndChapter } = req.body;
 
         if (!workId || !sourceUrl) {
             return res.status(400).json({ error: "workId and sourceUrl are required" });
@@ -45,7 +45,10 @@ export const initCrawl = async (req: Request, res: Response) => {
         const [job] = await db.insert(crawlJobs).values({
             workId,
             sourceUrl,
-            status: 'initializing'
+            status: 'initializing',
+            chaptersPerSummary: chaptersPerSummary || 1,
+            targetStartChapter: targetStartChapter || null,
+            targetEndChapter: targetEndChapter || null
         }).returning();
 
         // Start crawling chapter list (async)
@@ -178,18 +181,38 @@ export const processBatch = async (req: Request, res: Response) => {
 /**
  * Background batch processing
  */
+/**
+ * Background batch processing with Merge Support
+ */
 async function processBatchBackground(jobId: number, count: number, workTitle: string) {
-    const processedChapters: number[] = [];
     let errorCount = 0;
 
     try {
+        // Get job settings
+        const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
+        if (!job) return;
+
+        const mergeSize = job.chaptersPerSummary || 1;
+        // Adjust limit based on merge size to ensure we get enough chapters for at least one batch
+        // e.g. if mergeSize=5, and we want to process 2 batches (count=2), we need 10 chapters.
+        // But 'count' usually comes from 'batchSize' which implies Number of Summaries to produce?
+        // Or Number of source chapters?
+        // Let's assume 'count' is Number of Parallel Processings we want to do.
+        // If mergeSize > 1, strictly speaking we should process serially or carefully to maintain order.
+        // For safety in Merge Mode, let's process 1 merged-block at a time to avoid chaos, or just fetch 'count * mergeSize' chapters.
+
+        // Let's interpret 'count' as 'number of source chapters to attempt' roughly, but aligned to mergeSize.
+        // Actually, it's safer to just fetch a larger chunk of pending chapters and group them.
+
+        const fetchLimit = count * mergeSize;
+
         // Get pending chapters
         const pendingChapters = await db.query.crawlChapters.findMany({
             where: and(
                 eq(crawlChapters.jobId, jobId),
                 eq(crawlChapters.status, 'pending')
             ),
-            limit: count,
+            limit: fetchLimit,
             orderBy: (crawlChapters, { asc }) => [asc(crawlChapters.chapterNumber)]
         });
 
@@ -202,7 +225,6 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                 })
                 .where(eq(crawlJobs.id, jobId));
 
-            const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
             const duration = calculateDuration(job?.startedAt, new Date());
 
             await telegramService.sendAlert('complete',
@@ -212,75 +234,113 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
             return;
         }
 
-        // Process each chapter
-        for (const chapter of pendingChapters) {
-            try {
-                console.log(`📖 Processing chapter ${chapter.chapterNumber}...`);
+        // Group chapters into chunks
+        const chunks = [];
+        for (let i = 0; i < pendingChapters.length; i += mergeSize) {
+            chunks.push(pendingChapters.slice(i, i + mergeSize));
+        }
 
-                // Update status: crawling
+        console.log(`📦 Processing ${chunks.length} chunks (Merge Size: ${mergeSize})...`);
+
+        // Process each chunk
+        for (const chunk of chunks) {
+            // Verify chunk completeness? 
+            // If mergeSize=5 but we only have 3 chapters left at the very end -> Process them as one chunk.
+
+            const startChap = chunk[0].chapterNumber;
+            const endChap = chunk[chunk.length - 1].chapterNumber;
+            const chunkTitle = chunk.length === 1
+                ? `Chương ${startChap}`
+                : `Chương ${startChap} - ${endChap}`;
+
+            try {
+                console.log(`📖 Processing chunk ${chunkTitle}...`);
+
+                // 1. Mark all as crawling
                 await db.update(crawlChapters)
                     .set({ status: 'crawling' })
-                    .where(eq(crawlChapters.id, chapter.id));
+                    .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
 
-                // Crawl content
-                const content = await crawlService.crawlChapterContent(chapter.sourceUrl);
+                // 2. Crawl content for all chapters in chunk
+                const crawledContents = [];
+                for (const ch of chunk) {
+                    const content = await crawlService.crawlChapterContent(ch.sourceUrl);
+
+                    // Update individual crawl record
+                    await db.update(crawlChapters)
+                        .set({
+                            rawContent: content,
+                            crawledAt: new Date(),
+                            status: 'summarizing' // Temporary status before final merge
+                        })
+                        .where(eq(crawlChapters.id, ch.id));
+
+                    crawledContents.push({
+                        ...ch,
+                        content
+                    });
+
+                    // Small delay between chapters in chunk
+                    if (chunk.length > 1) await new Promise(r => setTimeout(r, 500));
+                }
+
+                // 3. Merge Content
+                const combinedContent = crawledContents
+                    .map(c => `### Chương ${c.chapterNumber}: ${c.title || ''}\n\n${c.content}`)
+                    .join('\n\n---\n\n');
+
+                // 4. Summarize Combined Content
+                const summary = await summarizeChapter(startChap, chunkTitle, combinedContent);
+
+                // 5. Update Status for all source chapters
+                // We use the first chapter of the chunk to store the summary in crawlChapters for reference,
+                // or store same summary in all? Let's store in all for simplicity, or just first.
+                // Storing in all allows debugging.
 
                 await db.update(crawlChapters)
                     .set({
-                        rawContent: content,
-                        crawledAt: new Date(),
-                        status: 'summarizing'
-                    })
-                    .where(eq(crawlChapters.id, chapter.id));
-
-                // AI Summarize
-                const summary = await summarizeChapter(chapter.chapterNumber, chapter.title || '', content);
-
-                await db.update(crawlChapters)
-                    .set({
-                        summary,
+                        summary, // All get the same merged summary
                         summarizedAt: new Date(),
                         status: 'completed'
                     })
-                    .where(eq(crawlChapters.id, chapter.id));
+                    .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
 
-                // Save to main chapters table (if workId exists)
-                if (chapter.workId) {
+                // 6. Save to Main Chapters Table
+                // Create ONE chapter record for the chunk
+                if (chunk[0].workId) {
                     await db.insert(chapters).values({
-                        workId: chapter.workId,
-                        chapterNumber: chapter.chapterNumber,
-                        title: chapter.title,
-                        originalText: content,
+                        workId: chunk[0].workId,
+                        chapterNumber: startChap, // Index by start chapter
+                        title: chunkTitle,
+                        originalText: combinedContent,
                         aiText: summary,
                         summary: summary.substring(0, 200),
                         status: 'PUBLISHED'
                     });
                 }
 
-                processedChapters.push(chapter.chapterNumber);
-                console.log(`✅ Chapter ${chapter.chapterNumber} completed`);
+                console.log(`✅ Chunk ${chunkTitle} completed`);
 
             } catch (error: any) {
-                console.error(`❌ Error processing chapter ${chapter.chapterNumber}:`, error.message);
+                console.error(`❌ Error processing chunk ${chunkTitle}:`, error.message);
 
-                // Update chapter status to failed
+                // Mark all in chunk as failed
                 await db.update(crawlChapters)
                     .set({
                         status: 'failed',
                         error: error.message,
-                        retryCount: (chapter.retryCount || 0) + 1
+                        retryCount: sql`${crawlChapters.retryCount} + 1`
                     })
-                    .where(eq(crawlChapters.id, chapter.id));
+                    .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
 
                 errorCount++;
 
-                // Send Telegram alert for error
+                // Send Alert
                 await telegramService.sendAlert('error',
-                    telegramService.formatErrorAlert(workTitle, chapter.chapterNumber, error.message, jobId)
+                    telegramService.formatErrorAlert(workTitle, startChap, error.message, jobId)
                 );
 
-                // Stop processing on error
-                break;
+                break; // Stop batch on error
             }
         }
 
@@ -303,11 +363,11 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
 
         // Send progress alert (every 50 chapters)
         const summarizedCount = Number(stats[0]?.summarized || 0);
-        const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
+        const currentJob = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
 
         if (summarizedCount % 50 === 0 && summarizedCount > 0) {
             await telegramService.sendAlert('progress',
-                telegramService.formatProgressAlert(workTitle, summarizedCount, job?.totalChapters || 0, jobId)
+                telegramService.formatProgressAlert(workTitle, summarizedCount, currentJob?.totalChapters || 0, jobId)
             );
         }
 
@@ -460,3 +520,19 @@ function calculateDuration(start: Date | null | undefined, end: Date): string {
     }
     return `${minutes}m`;
 }
+
+/**
+ * Extract work info from URL
+ */
+export const extractWorkInfo = async (req: Request, res: Response) => {
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: "URL is required" });
+
+        const info = await crawlService.extractWorkInfo(url);
+        res.json(info);
+    } catch (error: any) {
+        console.error("Error extracting info:", error);
+        res.status(500).json({ error: error.message });
+    }
+};

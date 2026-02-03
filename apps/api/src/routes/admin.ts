@@ -53,9 +53,11 @@ import {
     pauseJob,
     resumeJob,
     getActiveJobs,
-    testTelegramConnection
+    testTelegramConnection,
+    extractWorkInfo
 } from "../controllers/crawlController";
 router.post("/crawl/init", initCrawl);
+router.post("/crawl/extract-info", extractWorkInfo);
 router.post("/crawl/:jobId/process-batch", processBatch);
 router.get("/crawl/:jobId/status", getCrawlStatus);
 router.post("/crawl/:jobId/toggle-auto", toggleAutoMode);

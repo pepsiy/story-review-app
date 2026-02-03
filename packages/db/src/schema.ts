@@ -335,6 +335,11 @@ export const crawlJobs = pgTable('crawl_jobs', {
     autoMode: boolean('auto_mode').default(false),
     batchSize: integer('batch_size').default(5),
 
+    // Merge settings
+    chaptersPerSummary: integer('chapters_per_summary').default(1),
+    targetStartChapter: integer('target_start_chapter'), // Optional range start
+    targetEndChapter: integer('target_end_chapter'),     // Optional range end
+
     // Timestamps
     createdAt: timestamp('created_at').defaultNow(),
     startedAt: timestamp('started_at'),

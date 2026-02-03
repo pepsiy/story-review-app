@@ -15,6 +15,48 @@ export class CrawlService {
     };
 
     /**
+     * Parse thông tin truyện từ URL
+     */
+    async extractWorkInfo(url: string): Promise<{
+        title: string;
+        author: string;
+        genre: string;
+        description: string;
+        coverImage: string;
+        status: string;
+    }> {
+        try {
+            const response = await axios.get(url, { headers: this.baseHeaders, timeout: 30000 });
+            const $ = cheerio.load(response.data);
+
+            const title = $('h3.title[itemprop="name"]').text().trim() || $('h1').text().trim();
+            const author = $('a[itemprop="author"]').text().trim();
+
+            const genre = $('a[itemprop="genre"]')
+                .map((i, el) => $(el).text().trim())
+                .get()
+                .join(', ');
+
+            const coverImage = $('.book img').attr('src') || '';
+            const description = $('.desc-text').html()?.trim() || ''; // Use html to preserve <br>
+
+            const status = $('.info .text-success').text().trim() === 'Full' ? 'COMPLETED' : 'ONGOING';
+
+            return {
+                title,
+                author,
+                genre,
+                description,
+                coverImage,
+                status
+            };
+        } catch (error: any) {
+            console.error('❌ Error extracting work info:', error.message);
+            throw new Error(`Failed to extract work info: ${error.message}`);
+        }
+    }
+
+    /**
      * Crawl danh sách tất cả chapters từ trang truyện
      * @param sourceUrl URL truyện (e.g. https://truyenfull.vision/tien-nghich)
      * @returns Array của chapter info
