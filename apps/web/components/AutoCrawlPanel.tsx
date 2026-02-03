@@ -292,68 +292,76 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
             </div>
 
             {/* Controls */}
-            <div className="flex gap-2 flex-wrap">
-                <Button
-                    onClick={() => processBatch(5)}
-                    disabled={processing || job.status === 'processing' || job.status === 'completed'}
-                    size="sm"
-                >
-                    <PlayCircle className="mr-2 h-4 w-4" />
-                    Process 5 Chapters
-                </Button>
-
-                <Button
-                    onClick={() => processBatch(10)}
-                    disabled={processing || job.status === 'processing' || job.status === 'completed'}
-                    variant="outline"
-                    size="sm"
-                >
-                    <Play className="mr-2 h-4 w-4" />
-                    Process 10 Chapters
-                </Button>
-
-                {job.status === 'processing' ? (
-                    <Button onClick={pauseJob} variant="destructive" size="sm">
-                        <Pause className="mr-2 h-4 w-4" />
-                        Pause
+            <div className="flex gap-2 flex-wrap items-center bg-gray-50 p-3 rounded-lg border">
+                <div className="flex gap-2 mr-auto">
+                    <Button
+                        onClick={() => processBatch(job.batchSize || 5)}
+                        disabled={processing || job.status === 'processing' || job.status === 'completed'}
+                        size="sm"
+                        className="bg-indigo-600 hover:bg-indigo-700"
+                    >
+                        {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
+                        Chạy Ngay ({job.batchSize || 5} Chương)
                     </Button>
-                ) : job.status === 'paused' ? (
-                    <Button onClick={resumeJob} variant="default" size="sm">
-                        <Play className="mr-2 h-4 w-4" />
-                        Resume
-                    </Button>
-                ) : null}
 
-                <Button
-                    onClick={toggleAutoMode}
-                    variant={job.autoMode ? "secondary" : "outline"}
-                    size="sm"
-                >
-                    {job.autoMode ? "🤖 Auto: ON" : "⏸️ Auto: OFF"}
-                </Button>
+                    {job.status === 'processing' ? (
+                        <Button onClick={pauseJob} variant="destructive" size="sm">
+                            <Pause className="mr-2 h-4 w-4" /> Dừng
+                        </Button>
+                    ) : job.status === 'paused' ? (
+                        <Button onClick={resumeJob} variant="outline" size="sm">
+                            <Play className="mr-2 h-4 w-4" /> Tiếp Tục
+                        </Button>
+                    ) : null}
+                </div>
+
+                <div className="flex items-center gap-2 border-l pl-4">
+                    <span className="text-sm font-medium text-gray-700">Tự Động Chạy:</span>
+                    <Button
+                        onClick={toggleAutoMode}
+                        variant={job.autoMode ? "default" : "outline"}
+                        size="sm"
+                        className={job.autoMode ? "bg-green-600 hover:bg-green-700" : ""}
+                    >
+                        {job.autoMode ? "ON (Bật)" : "OFF (Tắt)"}
+                    </Button>
+                </div>
             </div>
 
             {/* Auto mode notice */}
             {job.autoMode && (
-                <div className="bg-amber-50 border border-amber-200 rounded p-3 text-sm text-amber-800">
-                    ⚙️ Auto mode đang bật. Cron job sẽ tự động xử lý 5 chapters mỗi 2 phút.
+                <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800 flex items-center">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Hệ thống đang tự động chạy nền (Mỗi 2 phút xử lý {job.batchSize || 5} chương). Bạn có thể làm việc khác.
                 </div>
             )}
 
-            {/* Failed Chapters */}
+            {/* Failed Chapters Log */}
             {failedChapters.length > 0 && (
-                <div className="border border-red-200 bg-red-50 rounded p-4">
-                    <h4 className="font-semibold text-red-800 mb-2">⚠️ Failed Chapters ({failedChapters.length})</h4>
-                    <ul className="space-y-2 text-sm">
-                        {failedChapters.slice(0, 5).map(ch => (
-                            <li key={ch.id} className="text-red-700">
-                                <strong>Chapter {ch.chapterNumber}</strong>: {ch.error} ({ch.retryCount} retries)
-                            </li>
+                <div className="border border-red-200 bg-red-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-red-800 mb-3 flex items-center">
+                        ⚠️ Log Lỗi ({failedChapters.length} chương)
+                    </h4>
+                    <div className="max-h-60 overflow-y-auto space-y-2 pr-2">
+                        {failedChapters.map(ch => (
+                            <div key={ch.id} className="bg-white p-3 rounded border border-red-100 shadow-sm flex justify-between items-start">
+                                <div>
+                                    <div className="font-medium text-red-900">
+                                        Chương {ch.chapterNumber}: {ch.title || "No Title"}
+                                    </div>
+                                    <div className="text-xs text-red-600 mt-1">{ch.error}</div>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs border-red-200 hover:bg-red-50 text-red-700"
+                                    onClick={() => window.open(`/admin/works/${workId}/chapters/create?chapter=${ch.chapterNumber}`, '_blank')}
+                                >
+                                    Sửa Thủ Công
+                                </Button>
+                            </div>
                         ))}
-                    </ul>
-                    {failedChapters.length > 5 && (
-                        <p className="text-xs text-red-600 mt-2">...and {failedChapters.length - 5} more</p>
-                    )}
+                    </div>
                 </div>
             )}
 

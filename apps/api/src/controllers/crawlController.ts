@@ -298,11 +298,14 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
 
                 // Try parse JSON
                 try {
+                    // Clean markdown fences if present
+                    const cleanText = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
                     // Start from first '{' and end at last '}'
-                    const jsonStart = aiResponseText.indexOf('{');
-                    const jsonEnd = aiResponseText.lastIndexOf('}');
+                    const jsonStart = cleanText.indexOf('{');
+                    const jsonEnd = cleanText.lastIndexOf('}');
                     if (jsonStart !== -1 && jsonEnd !== -1) {
-                        const jsonStr = aiResponseText.substring(jsonStart, jsonEnd + 1);
+                        const jsonStr = cleanText.substring(jsonStart, jsonEnd + 1);
                         const data = JSON.parse(jsonStr);
                         if (data.title) title = data.title;
                         if (data.short_summary) shortSummary = data.short_summary;

@@ -36,7 +36,8 @@ export default function EditChapterPage({ params }: { params: Promise<{ id: stri
                 setChapterNumber(chapter.chapterNumber?.toString() || "");
                 setSourceChapterRange(chapter.sourceChapterRange || "");
                 setTitle(chapter.title || "");
-                setOriginalText(chapter.originalText || "");
+                // Prioritize AI Text (Summary) if available (Auto-Crawl), otherwise use Original Text (Manual)
+                setOriginalText(chapter.aiText || chapter.originalText || "");
                 setSummary(chapter.summary || "");
                 setYoutubeId(chapter.youtubeId || "");
                 setStatus(chapter.status || "DRAFT");

@@ -226,7 +226,7 @@ export default function EditWorkPage({ params }: { params: Promise<{ id: string 
                                     btn.disabled = true;
 
                                     try {
-                                        const res = await fetch("http://localhost:3001/admin/ai/generate", {
+                                        const res = await fetch(`${API_URL}/admin/ai/generate`, {
                                             method: "POST",
                                             headers: { "Content-Type": "application/json" },
                                             body: JSON.stringify({
@@ -239,7 +239,10 @@ export default function EditWorkPage({ params }: { params: Promise<{ id: string 
                                         } else {
                                             alert("Lỗi AI: " + (data.error || "Unknown"));
                                         }
-                                    } catch (e) { console.error(e); alert("Lỗi kết nối AI Service"); }
+                                    } catch (e: any) {
+                                        console.error(e);
+                                        alert(`Lỗi kết nối AI: ${e.message}`);
+                                    }
                                     finally {
                                         btn.innerText = originalText;
                                         btn.disabled = false;
