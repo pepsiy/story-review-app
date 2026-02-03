@@ -17,7 +17,7 @@ export function Header() {
                 </div>
                 <nav className="hidden md:flex items-center gap-6 font-medium text-slate-600">
                     <Link href="/game" className="flex items-center gap-1 text-green-600 hover:text-green-700 transition-colors font-bold">
-                        <span>🌱</span> Nông Trại
+                        <span>🧪</span> Tu Tiên
                     </Link>
                     <Link href="/the-loai" className="hover:text-indigo-600 transition-colors">Thể loại</Link>
                     <Link href="/bxh" className="hover:text-indigo-600 transition-colors">BXH</Link>

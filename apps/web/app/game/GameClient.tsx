@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap } from "lucide-react";
@@ -62,7 +62,7 @@ type GameState = {
 
 
 export default function GameClient() {
-    const { data: session } = useSession();
+    const { data: session, status } = useSession();
     const [loading, setLoading] = useState(true);
     const [state, setState] = useState<GameState | null>(null);
     const [missions, setMissions] = useState<Mission[]>([]);
@@ -109,11 +109,18 @@ export default function GameClient() {
     };
 
     useEffect(() => {
+        if (status === "loading") return;
+
+        if (status === "unauthenticated") {
+            setLoading(false);
+            return;
+        }
+
         if (session?.user?.id) {
             fetchState();
             fetchMissions();
         }
-    }, [session]);
+    }, [session, status]);
 
     // --- Actions ---
 
@@ -262,9 +269,33 @@ export default function GameClient() {
         } catch (e) { toast.error("Lỗi kết nối"); }
     };
 
-    if (loading) return <div className="flex justify-center p-10"><Loader2 className="animate-spin" /></div>;
-    if (!session) return <div className="text-center p-10">Vui lòng đăng nhập để chơi game!</div>;
-    if (!state) return <div className="text-center p-10">Lỗi tải dữ liệu game.</div>;
+    if (status === "loading" || (loading && status === "authenticated")) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] bg-slate-50">
+                <Loader2 className="w-12 h-12 text-green-600 animate-spin mb-4" />
+                <p className="text-slate-600 font-medium animate-pulse">Đang tải dữ liệu tiên môn...</p>
+            </div>
+        );
+    }
+
+    if (status === "unauthenticated" || !session) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] bg-slate-50 p-4">
+                <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md w-full border border-slate-200">
+                    <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Sprout className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Tu Tiên Giới</h2>
+                    <p className="text-slate-600 mb-6">Bạn cần đăng nhập để bắt đầu hành trình tu tiên, trồng linh dược và luyện đan.</p>
+                    <Button onClick={() => signIn()} className="w-full bg-green-600 hover:bg-green-700 text-lg py-6 font-bold shadow-green-200 shadow-xl">
+                        Đăng Nhập Ngay
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    if (!state) return <div className="text-center p-10 text-red-500">Lỗi tải dữ liệu game. Vui lòng thử lại sau.</div>;
 
     // --- Render Helpers ---
 
