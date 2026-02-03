@@ -96,3 +96,4 @@ Nếu bạn muốn mở rộng, có thể cân nhắc:
 2.  **Hệ thống nhiệm vụ (Missions):** Đã có bảng `missions` trong DB nhưng chưa có API Controller logic đầy đủ (Check progress tự động).
 3.  **Bảng Xếp Hạng:** API lấy Top Users theo `cultivationExp` hoặc `gold`.
 4.  **Log Hoạt Động:** Lưu lịch sử ai đã trộm/tưới nước nhà mình để thông báo (Notification).
+S

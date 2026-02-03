@@ -292,28 +292,34 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                 // 4. Summarize Combined Content (Returns JSON String)
                 const aiResponseText = await summarizeChapter(startChap, chunkTitle, combinedContent);
 
+                const newChapterNumber = Math.floor((startChap - 1) / mergeSize) + 1;
+
                 let title = chunkTitle;
                 let shortSummary = "";
                 let fullContent = aiResponseText;
 
-                // Try parse JSON
+                // Try parse JSON with robust fallback
                 try {
-                    // Clean markdown fences if present
-                    const cleanText = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                    // 1. naive remove markdown
+                    let cleanText = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').trim();
 
-                    // Start from first '{' and end at last '}'
+                    // 2. find outer braces
                     const jsonStart = cleanText.indexOf('{');
                     const jsonEnd = cleanText.lastIndexOf('}');
+
                     if (jsonStart !== -1 && jsonEnd !== -1) {
-                        const jsonStr = cleanText.substring(jsonStart, jsonEnd + 1);
-                        const data = JSON.parse(jsonStr);
+                        cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
+                        const data = JSON.parse(cleanText);
                         if (data.title) title = data.title;
                         if (data.short_summary) shortSummary = data.short_summary;
                         if (data.content) fullContent = data.content;
+                    } else {
+                        throw new Error("No JSON braces found");
                     }
                 } catch (e) {
                     console.warn(`Could not parse JSON from AI response for chunk ${chunkTitle}. Using raw text.`);
-                    shortSummary = aiResponseText.substring(0, 300) + "...";
+                    // Fallback: Strip fences if possible so it looks cleaner
+                    shortSummary = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').substring(0, 300) + "...";
                 }
 
                 // Fallback for short summary if empty
@@ -329,7 +335,7 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
 
                     await db.insert(chapters).values({
                         workId: chunk[0].workId,
-                        chapterNumber: startChap,
+                        chapterNumber: newChapterNumber,
                         title: title,
                         originalText: combinedContent,
                         aiText: fullContent,
