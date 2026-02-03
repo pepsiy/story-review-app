@@ -289,35 +289,64 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                     .map(c => `### Chương ${c.chapterNumber}: ${c.title || ''}\n\n${c.content}`)
                     .join('\n\n---\n\n');
 
-                // 4. Summarize Combined Content
-                const summary = await summarizeChapter(startChap, chunkTitle, combinedContent);
+                // 4. Summarize Combined Content (Returns JSON String)
+                const aiResponseText = await summarizeChapter(startChap, chunkTitle, combinedContent);
 
-                // 5. Update Status for all source chapters
-                // We use the first chapter of the chunk to store the summary in crawlChapters for reference,
-                // or store same summary in all? Let's store in all for simplicity, or just first.
-                // Storing in all allows debugging.
+                let title = chunkTitle;
+                let shortSummary = "";
+                let fullContent = aiResponseText;
 
-                await db.update(crawlChapters)
-                    .set({
-                        summary, // All get the same merged summary
-                        summarizedAt: new Date(),
-                        status: 'completed'
-                    })
-                    .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
+                // Try parse JSON
+                try {
+                    // Start from first '{' and end at last '}'
+                    const jsonStart = aiResponseText.indexOf('{');
+                    const jsonEnd = aiResponseText.lastIndexOf('}');
+                    if (jsonStart !== -1 && jsonEnd !== -1) {
+                        const jsonStr = aiResponseText.substring(jsonStart, jsonEnd + 1);
+                        const data = JSON.parse(jsonStr);
+                        if (data.title) title = data.title;
+                        if (data.short_summary) shortSummary = data.short_summary;
+                        if (data.content) fullContent = data.content;
+                    }
+                } catch (e) {
+                    console.warn(`Could not parse JSON from AI response for chunk ${chunkTitle}. Using raw text.`);
+                    shortSummary = aiResponseText.substring(0, 300) + "...";
+                }
 
-                // 6. Save to Main Chapters Table
-                // Create ONE chapter record for the chunk
-                if (chunk[0].workId) {
+                // Fallback for short summary if empty
+                if (!shortSummary) {
+                    shortSummary = fullContent.substring(0, 300) + "...";
+                }
+
+                // 5. Update Status & Save Chapter
+                if (chunk[0]?.workId) {
+                    const sourceRange = startChap === endChap
+                        ? String(startChap)
+                        : `${startChap},${endChap}`;
+
                     await db.insert(chapters).values({
                         workId: chunk[0].workId,
-                        chapterNumber: startChap, // Index by start chapter
-                        title: chunkTitle,
+                        chapterNumber: startChap,
+                        title: title,
                         originalText: combinedContent,
-                        aiText: summary,
-                        summary: summary.substring(0, 200),
+                        aiText: fullContent,
+                        summary: shortSummary,
+                        sourceChapterRange: sourceRange,
                         status: 'PUBLISHED'
                     });
                 }
+
+                // Mark source crawling chapters as completed
+                await db.update(crawlChapters)
+                    .set({
+                        summary: shortSummary, // Use shortSummary
+                        summarizedAt: new Date(),
+                        status: 'completed'
+                    })
+
+                    .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
+
+
 
                 console.log(`✅ Chunk ${chunkTitle} completed`);
 

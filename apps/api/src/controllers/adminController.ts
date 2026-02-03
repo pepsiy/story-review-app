@@ -25,6 +25,28 @@ export const createWork = async (req: Request, res: Response) => {
             status: status || "ONGOING",
         }).returning();
 
+        // --- Auto-Add Genres Logic ---
+        if (genre && typeof genre === 'string') {
+            const genreList = genre.split(',').map(g => g.trim()).filter(g => g.length > 0);
+            for (const gName of genreList) {
+                const gSlug = gName.toLowerCase()
+                    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                    .replace(/[đĐ]/g, "d").replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, "-");
+
+
+                // Try insert genre if not exists
+                try {
+                    await db.insert(genres).values({
+                        name: gName,
+                        slug: gSlug,
+                        description: `Thể loại ${gName}`
+                    }).onConflictDoNothing();
+                } catch (err) {
+                    console.warn(`Could not auto-add genre ${gName}:`, err);
+                }
+            }
+        }
+
         res.status(201).json(newWork[0]);
     } catch (error: any) {
         console.error("Error creating work:", error);

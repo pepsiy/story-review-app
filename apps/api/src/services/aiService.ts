@@ -130,21 +130,56 @@ export const summarizeChapter = async (
     // Rate limiting
     await rateLimiter.enforceRateLimit();
 
-    const prompt = `Bạn là một chuyên gia tóm tắt tiểu thuyết. Hãy tóm tắt nội dung chương sau đây một cách súc tích nhưng đầy đủ ý chính (tối đa 300 từ):
+    const prompt = `Bạn là một tiểu thuyết gia và biên tập viên tài năng. Nhiệm vụ của bạn là xử lý nội dung văn bản gốc (được gộp từ ${title}) và trả về kết quả JSON gồm 3 phần: Tiêu đề, Tóm tắt ngắn, và Nội dung viết lại. Áp dụng chính xác các quy tắc sau:
 
-Chương ${chapterNumber}: ${title}
+---
+PHẦN 1: NỘI DUNG VIẾT LẠI (Key: "content")
+Hãy TÓM LƯỢC & VIẾT LẠI nội dung gốc thành một bài Review cuốn hút.
 
-Nội dung:
-${content.substring(0, 8000)} 
+**⚠️ MỤC TIÊU QUAN TRỌNG:**
+- **ĐỘ DÀI:** Chỉ giữ lại khoảng **40-50%** dung lượng so với bản gốc. CÔ ĐỌNG, không lan man.
+- **BỎ QUA:** Các hội thoại rườm rà, chi tiết mô tả không cần thiết.
+- **TẬP TRUNG:** Chỉ kể lại các sự kiện chính (Key Events) và cao trào.
 
-Yêu cầu:
-- Tóm tắt theo thứ tự diễn biến sự kiện
-- Nêu rõ nhân vật chính và hành động của họ
-- Giữ nguyên tên riêng, thuật ngữ đặc biệt
-- Ngôn ngữ tự nhiên, dễ hiểu
-- Không thêm ý kiến cá nhân hoặc phán xét
+**⚠️ TUÂN THỦ PHÁP LÝ:**
+1. **KHÔNG COPY** nguyên văn bản gốc.
+2. Viết lại 100% bằng giọng văn mới.
+3. BẮT BUỘC mở đầu bằng: *"Đây là bài tóm tắt và cảm nhận nội dung, không thay thế tác phẩm gốc."*
 
-Tóm tắt:`;
+**PHONG CÁCH VIẾT:**
+- Nhịp điệu NHANH, lôi cuốn.
+- Dùng từ ngữ gợi hình để thay thế cho các đoạn tả dài dòng.
+- Kết thúc: Dừng lại ĐỘT NGỘT ngay tại hành động/câu thoại cao trào nhất.
+- 🚫 **CẤM TUYỆT ĐỐI**: Không viết đoạn kết luận/nhận xét cuối bài.
+
+---
+PHẦN 2: TÓM TẮT NGẮN (Key: "short_summary")
+Hãy viết một đoạn TÓM TẮT NGẮN dưới góc độ PHÂN TÍCH/CẢM NHẬN (3-5 câu).
+- Tập trung vào ý nghĩa, cảm xúc nhân vật, và nghệ thuật kể chuyện.
+- Bắt đầu bằng những câu như: "Chương truyện khắc họa...", "Bi kịch của nhân vật bắt đầu...", "Tác giả khéo léo lồng ghép..."
+- TUYỆT ĐỐI KHÔNG bắt đầu bằng: "Chương truyện giới thiệu...", "Chương này nói về..."
+
+---
+PHẦN 3: TIÊU ĐỀ (Key: "title")
+Đặt một TÊN CHƯƠNG ngắn gọn, súc tích (tối đa 5-8 từ).
+- Tên chương phải GỢI TỚI nội dung chính.
+- KHÔNG dùng số thứ tự (VD: "Chương 1", "Phần 1").
+- KHÔNG dùng từ "Chương".
+- Ví dụ: "Hành Trình Bắt Đầu", "Thử Thách Đầu Tiên", "Định Mệnh Giao Thoa".
+
+---
+Đầu vào:
+Nguồn: ${title}
+Nội dung gốc:
+${content.substring(0, 15000)}
+
+YÊU CẦU ĐẦU RA:
+Hãy trả về kết quả dưới dạng **JSON Valid** (không kèm markdown \`\`\`json) với cấu trúc sau:
+{
+  "title": "Tiêu đề bạn đặt",
+  "short_summary": "Tóm tắt ngắn...",
+  "content": "Nội dung viết lại..."
+}`;
 
     try {
         const summary = await generateText(prompt);
