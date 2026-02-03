@@ -171,7 +171,7 @@ PHẦN 3: TIÊU ĐỀ (Key: "title")
 Đầu vào:
 Nguồn: ${title}
 Nội dung gốc:
-${content.substring(0, 15000)}
+${content.substring(0, 100000)}
 
 YÊU CẦU ĐẦU RA:
 Hãy trả về kết quả dưới dạng **JSON Valid** (không kèm markdown \`\`\`json) với cấu trúc sau:
