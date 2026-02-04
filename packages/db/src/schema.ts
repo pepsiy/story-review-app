@@ -122,6 +122,7 @@ export const users = pgTable("user", {
     gold: integer("gold").default(100), // Tiền tệ trong game
     cultivationLevel: text("cultivation_level").default("Phàm Nhân"), // Cảnh giới: Phàm Nhân, Luyện Khí, Trúc Cơ...
     cultivationExp: integer("cultivation_exp").default(0), // Điểm tu vi
+    lastDailyReset: timestamp("last_daily_reset").defaultNow(),
 });
 
 export const accounts = pgTable(

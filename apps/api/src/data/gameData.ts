@@ -44,10 +44,10 @@ export const WATER_CONFIG = {
 };
 
 export const CULTIVATION_LEVELS = [
-    { name: 'Phàm Nhân', exp: 0 },
-    { name: 'Luyện Khí', exp: 100 },
-    { name: 'Trúc Cơ', exp: 1000 },
-    { name: 'Kim Đan', exp: 5000 },
-    { name: 'Nguyên Anh', exp: 20000 },
-    { name: 'Hóa Thần', exp: 100000 },
+    { name: 'Phàm Nhân', exp: 0, breakthroughChance: 1.0 },
+    { name: 'Luyện Khí', exp: 100, breakthroughChance: 0.9 }, // To Trúc Cơ
+    { name: 'Trúc Cơ', exp: 1000, breakthroughChance: 0.7 }, // To Kim Đan
+    { name: 'Kim Đan', exp: 5000, breakthroughChance: 0.5 }, // To Nguyên Anh
+    { name: 'Nguyên Anh', exp: 20000, breakthroughChance: 0.3 }, // To Hóa Thần
+    { name: 'Hóa Thần', exp: 100000, breakthroughChance: 0.1 }, // To Luyện Hư
 ];

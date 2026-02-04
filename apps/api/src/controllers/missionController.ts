@@ -3,11 +3,35 @@ import { eq, and } from "drizzle-orm";
 import { db } from "../../../../packages/db/src";
 import { users, missions, userMissions, inventory } from "../../../../packages/db/src";
 
+// Helper: Check Daily Reset
+const checkDailyReset = async (userId: string) => {
+    const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+    if (!user) return;
+
+    const now = new Date();
+    const lastReset = user.lastDailyReset ? new Date(user.lastDailyReset) : new Date(0);
+
+    // Simple Day Comparison (UTC)
+    const isSameDay = now.toISOString().split('T')[0] === lastReset.toISOString().split('T')[0];
+
+    if (!isSameDay) {
+        // Reset: Delete all user missions to allow re-doing them
+        // In a real app, we might filter by Mission Type 'DAILY'
+        await db.delete(userMissions).where(eq(userMissions.userId, userId));
+
+        // Update Reset Time
+        await db.update(users).set({ lastDailyReset: now }).where(eq(users.id, userId));
+    }
+}
+
 // Get all available missions + user's active missions
 export const getMissions = async (req: Request, res: Response) => {
     try {
         const { userId } = req.body;
         if (!userId) return res.status(400).json({ error: "User ID required" });
+
+        // Check Daily Reset
+        await checkDailyReset(userId);
 
         // Get all missions
         const allMissions = await db.select().from(missions);

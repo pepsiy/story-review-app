@@ -9,7 +9,9 @@ import {
     useItem,
     unlockSlot,
     waterPlant,
-    getLogs
+    getLogs,
+    attemptBreakthrough,
+    getLeaderboard
 } from "../controllers/gameController";
 
 import { getMissions, acceptMission, completeMission } from "../controllers/missionController";
@@ -32,6 +34,10 @@ router.post("/use", useItem);
 router.post("/unlock-slot", unlockSlot);
 router.post("/water", waterPlant); // Use gameController's waterPlant logic
 router.get("/logs", getLogs);
+
+// Phase 2: Retention (Breakthrough & Leaderboard)
+router.post("/breakthrough", attemptBreakthrough);
+router.get("/leaderboard", getLeaderboard);
 
 // Mission Routes
 router.post("/missions", getMissions);

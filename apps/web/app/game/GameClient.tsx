@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession, signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap } from "lucide-react";
+import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap, Trophy, Flame } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 
@@ -70,6 +70,14 @@ type GameLog = {
     createdAt: string;
 };
 
+type LeaderboardEntry = {
+    id: string;
+    name: string;
+    image: string | null;
+    cultivationLevel: string;
+    cultivationExp: number;
+};
+
 // Constants
 const PLOT_UNLOCK_COSTS: Record<number, number> = {
     3: 1000,
@@ -80,6 +88,16 @@ const PLOT_UNLOCK_COSTS: Record<number, number> = {
     8: 500000
 };
 
+// Duplicate from Backend for UI logic
+const CULTIVATION_LEVELS = [
+    { name: 'Phàm Nhân', exp: 0, nextLevel: 'Luyện Khí', req: 100 },
+    { name: 'Luyện Khí', exp: 100, nextLevel: 'Trúc Cơ', req: 1000 },
+    { name: 'Trúc Cơ', exp: 1000, nextLevel: 'Kim Đan', req: 5000 },
+    { name: 'Kim Đan', exp: 5000, nextLevel: 'Nguyên Anh', req: 20000 },
+    { name: 'Nguyên Anh', exp: 20000, nextLevel: 'Hóa Thần', req: 100000 },
+    { name: 'Hóa Thần', exp: 100000, nextLevel: 'Luyện Hư', req: 500000 },
+];
+
 export default function GameClient() {
     const { data: session, status } = useSession();
     const [loading, setLoading] = useState(true);
@@ -87,7 +105,8 @@ export default function GameClient() {
     const [missions, setMissions] = useState<Mission[]>([]);
     const [userMissions, setUserMissions] = useState<UserMission[]>([]);
     const [logs, setLogs] = useState<GameLog[]>([]);
-    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS'>('FARM');
+    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS' | 'LEADERBOARD'>('FARM');
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -139,6 +158,16 @@ export default function GameClient() {
         } catch (e) { console.error("Fetch Logs Error", e); }
     };
 
+    const fetchLeaderboard = async () => {
+        try {
+            const res = await fetch(`${API_URL}/game/leaderboard`);
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                setLeaderboard(data);
+            }
+        } catch (e) { console.error("Fetch LB Error", e); }
+    };
+
     useEffect(() => {
         if (status === "loading") return;
 
@@ -151,6 +180,7 @@ export default function GameClient() {
             fetchState();
             fetchMissions();
             fetchLogs();
+            fetchLeaderboard();
         }
     }, [session, status]);
 
@@ -339,6 +369,32 @@ export default function GameClient() {
         } catch (e) { toast.error("Lỗi kết nối"); }
     };
 
+    const breakthrough = async () => {
+        if (!session?.user?.id) return;
+        try {
+            // Confirmation?
+            if (!confirm("Xác suất thất bại sẽ mất EXP. Bạn chắc chắn muốn đột phá?")) return;
+
+            const res = await fetch(`${API_URL}/game/breakthrough`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                if (data.success) {
+                    toast.success(data.message);
+                } else {
+                    toast.error(data.message);
+                }
+                fetchState();
+                fetchLogs();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
     if (status === "loading" || (loading && status === "authenticated")) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] bg-slate-50">
@@ -367,7 +423,10 @@ export default function GameClient() {
 
     if (!state) return <div className="text-center p-10 text-red-500">Lỗi tải dữ liệu game. Vui lòng thử lại sau.</div>;
 
-    // --- Render Helpers ---
+    // --- Helpers for Render ---
+    const currentLvlDef = CULTIVATION_LEVELS.find(l => l.name === state.user.cultivationLevel) || CULTIVATION_LEVELS[0];
+    const canBreakthrough = currentLvlDef.name !== 'Luyện Hư' && state.user.cultivationExp >= (currentLvlDef.req || 999999);
+    const expProgress = Math.min(100, (state.user.cultivationExp / (currentLvlDef.req || 1)) * 100);
 
     const renderPlot = (plot: Plot) => {
         if (!plot.isUnlocked) {
@@ -488,54 +547,73 @@ export default function GameClient() {
             <div className="max-w-4xl mx-auto space-y-6">
 
                 {/* Header Stats */}
-                <div className="bg-white rounded-xl shadow-sm p-4 flex flex-wrap items-center justify-between gap-4 border border-green-100">
-                    <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow">
-                            {state.user.cultivationLevel[0]}
-                        </div>
-                        <div>
-                            <h2 className="font-bold text-slate-800">{state.user.cultivationLevel}</h2>
-                            <div className="text-xs text-slate-500 flex items-center gap-1">
-                                Exp: <span className="text-blue-600 font-mono">{state.user.cultivationExp}</span>
+                <div className="bg-white rounded-xl shadow-sm p-4 border border-green-100">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow relative">
+                                {state.user.cultivationLevel[0]}
+                                {canBreakthrough && <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full animate-ping" />}
+                            </div>
+                            <div>
+                                <h2 className="font-bold text-slate-800">{state.user.cultivationLevel}</h2>
+                                <div className="text-xs text-slate-500 flex items-center gap-1 w-40">
+                                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                        <div className={`h-full ${canBreakthrough ? 'bg-red-500 animate-pulse' : 'bg-blue-500'}`} style={{ width: `${expProgress}%` }} />
+                                    </div>
+                                    <span className="text-[10px] w-12 text-right">{state.user.cultivationExp}/{currentLvlDef.req}</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="flex items-center gap-4 bg-yellow-50 px-4 py-2 rounded-lg border border-yellow-100">
-                        <Coins className="text-yellow-600 w-5 h-5" />
-                        <span className="font-bold text-yellow-700">{state.user.gold.toLocaleString()} <span className="text-xs font-normal">Vàng</span></span>
+                        <div className="flex items-center gap-2">
+                            {canBreakthrough && (
+                                <Button size="sm" variant="destructive" className="animate-pulse shadow-red-200 shadow-lg" onClick={breakthrough}>
+                                    <Flame className="w-4 h-4 mr-1" /> Đột Phá!
+                                </Button>
+                            )}
+                            <div className="flex items-center gap-2 bg-yellow-50 px-3 py-1.5 rounded-lg border border-yellow-100">
+                                <Coins className="text-yellow-600 w-4 h-4" />
+                                <span className="font-bold text-yellow-700 text-sm">{state.user.gold.toLocaleString()} <span className="text-[10px] font-normal text-yellow-600">Vàng</span></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 {/* Navigation Tabs */}
-                <div className="flex gap-2">
+                <div className="flex gap-1 overflow-x-auto pb-2">
                     <button
                         onClick={() => setActiveTab('FARM')}
-                        className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'FARM' ? 'bg-white text-green-700 shadow-sm' : 'bg-green-800/10 text-green-800 hover:bg-green-800/20'}`}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'FARM' ? 'bg-white text-green-700 shadow-sm' : 'bg-green-800/10 text-green-800 hover:bg-green-800/20'}`}
                     >
                         <Sprout className="w-4 h-4" /> Nông Trại
                     </button>
                     <button
                         onClick={() => setActiveTab('SHOP')}
-                        className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'SHOP' ? 'bg-white text-blue-700 shadow-sm' : 'bg-blue-800/10 text-blue-800 hover:bg-blue-800/20'}`}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'SHOP' ? 'bg-white text-blue-700 shadow-sm' : 'bg-blue-800/10 text-blue-800 hover:bg-blue-800/20'}`}
                     >
                         <ShoppingBag className="w-4 h-4" /> Thị Trấn
                     </button>
                     <button
                         onClick={() => setActiveTab('ALCHEMY')}
-                        className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'ALCHEMY' ? 'bg-white text-purple-700 shadow-sm' : 'bg-purple-800/10 text-purple-800 hover:bg-purple-800/20'}`}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'ALCHEMY' ? 'bg-white text-purple-700 shadow-sm' : 'bg-purple-800/10 text-purple-800 hover:bg-purple-800/20'}`}
                     >
                         <FlaskConical className="w-4 h-4" /> Luyện Đan
                     </button>
                     <button
                         onClick={() => setActiveTab('MISSIONS')}
-                        className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'MISSIONS' ? 'bg-white text-orange-700 shadow-sm' : 'bg-orange-800/10 text-orange-800 hover:bg-orange-800/20'}`}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'MISSIONS' ? 'bg-white text-orange-700 shadow-sm' : 'bg-orange-800/10 text-orange-800 hover:bg-orange-800/20'}`}
                     >
-                        📜 Bảng Cáo Thị
+                        📜 Cáo Thị
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('LEADERBOARD')}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'LEADERBOARD' ? 'bg-white text-yellow-700 shadow-sm' : 'bg-yellow-800/10 text-yellow-800 hover:bg-yellow-800/20'}`}
+                    >
+                        <Trophy className="w-4 h-4" /> BXH
                     </button>
                     <button
                         onClick={() => setActiveTab('LOGS')}
-                        className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'LOGS' ? 'bg-white text-slate-700 shadow-sm' : 'bg-slate-800/10 text-slate-800 hover:bg-slate-800/20'}`}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'LOGS' ? 'bg-white text-slate-700 shadow-sm' : 'bg-slate-800/10 text-slate-800 hover:bg-slate-800/20'}`}
                     >
                         📝 Nhật Ký
                     </button>
@@ -763,6 +841,48 @@ export default function GameClient() {
                         </div>
                     )}
 
+                    {activeTab === 'LEADERBOARD' && (
+                        <div>
+                            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-500" /> Bảng Xếp Hạng Tu Tiên</h3>
+                            <div className="bg-white border rounded overflow-hidden">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-600 font-bold border-b">
+                                        <tr>
+                                            <th className="p-3 w-12 text-center">#</th>
+                                            <th className="p-3">Đạo Hữu</th>
+                                            <th className="p-3">Cảnh Giới</th>
+                                            <th className="p-3 text-right">Tu Vi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {leaderboard.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={4} className="p-4 text-center text-slate-400 italic">Chưa có dữ liệu...</td>
+                                            </tr>
+                                        ) : (
+                                            leaderboard.map((user, idx) => (
+                                                <tr key={user.id} className="border-b last:border-0 hover:bg-yellow-50/50">
+                                                    <td className="p-3 text-center font-bold text-slate-500">
+                                                        {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+                                                    </td>
+                                                    <td className="p-3 font-medium text-slate-800 flex items-center gap-2">
+                                                        <div className="w-6 h-6 rounded-full bg-slate-200 overflow-hidden">
+                                                            {user.image && <img src={user.image} alt="avatar" className="w-full h-full object-cover" />}
+                                                        </div>
+                                                        {user.name || 'Vô Danh'}
+                                                        {user.id === session?.user?.id && <span className="text-[10px] bg-blue-100 text-blue-700 px-1 rounded ml-1">Bạn</span>}
+                                                    </td>
+                                                    <td className="p-3 text-slate-600">{user.cultivationLevel}</td>
+                                                    <td className="p-3 text-right font-mono text-blue-600">{user.cultivationExp.toLocaleString()}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
                     {activeTab === 'LOGS' && (
                         <div>
                             <h3 className="font-bold text-slate-700 mb-4">📜 Nhật Ký Tu Tiên</h3>
@@ -770,7 +890,7 @@ export default function GameClient() {
                                 {logs.map(log => (
                                     <div key={log.id} className="bg-white border border-slate-100 p-3 rounded text-sm shadow-sm flex gap-3 items-start">
                                         <div className="bg-slate-100 p-2 rounded text-xl">
-                                            {log.action === 'WATER' ? '💧' : log.action === 'UNLOCK_PLOT' ? '🔓' : '📝'}
+                                            {log.action === 'WATER' ? '💧' : log.action === 'UNLOCK_PLOT' ? '🔓' : log.action.includes('BREAKTHROUGH') ? '⚡' : '📝'}
                                         </div>
                                         <div>
                                             <div className="text-slate-800">{log.description}</div>
