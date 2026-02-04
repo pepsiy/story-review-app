@@ -309,6 +309,11 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
 
                 const newChapterNumber = Math.floor((startChap - 1) / mergeSize) + 1;
 
+                console.log(`[Crawl Debug] Chunk ${chunkTitle}: Input Length=${combinedContent.length}, AI Output Length=${aiResponseText.length}`);
+                if (aiResponseText.length > combinedContent.length * 0.9) {
+                    console.warn(`[Crawl Debug] ⚠️ WARN: Output size is very close to input size. Possible copy detected?`);
+                }
+
                 let title = chunkTitle;
                 let shortSummary = "";
                 let fullContent = aiResponseText;

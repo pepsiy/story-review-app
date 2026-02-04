@@ -54,8 +54,8 @@ export const generateText = async (prompt: string): Promise<string> => {
             const genAI = new GoogleGenerativeAI(key);
 
             // User requested "Gemini 2.5 Flash"
-            // User requested "Gemini 2.5 Flash"
-            const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+            // User requested "Gemini 1.5 Flash" (Corrected from 2.5)
+            const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 generationConfig: {
