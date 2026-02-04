@@ -160,18 +160,15 @@ export const summarizeChapter = async (
     await rateLimiter.enforceRateLimit();
 
     console.log(`[AI-Service] Summarizing content length: ${content.length} chars (Limit: 100k)`);
-    // Warn if content is too short
-    if (content.length < 500) {
-        console.warn(`[AI-Service] Content too short (${content.length}), AI might hallucinate.`);
-    }
+    console.log(`[AI-Service] Input Content Preview: ${content.substring(0, 200)}...`);
 
     const prompt = `Bạn là một tiểu thuyết gia và biên tập viên tài năng. Nhiệm vụ của bạn là LÀM MỚI (REWRITE) nội dung văn bản gốc bên dưới (được gộp từ ${title}) thành một tác phẩm mới hấp dẫn hơn.
 
 ---
 🛑 **QUY TẮC BẤT KHẢ XÂM PHẠM (CRITICAL RULES)**:
-1. **KHÔNG ĐƯỢC COPY** nguyên văn bản gốc. Nếu copy sẽ bị phạt nặng.
-2. **PHẢI VIẾT LẠI 100%** bằng giọng văn mới, nhanh, gọn, lôi cuốn.
-3. Chỉ giữ lại **40-50%** dung lượng. Lược bỏ thoại rườm rà.
+1. **KHÔNG ĐƯỢC COPY** nguyên văn bản gốc.
+2. **PHẢI VIẾT LẠI 100%** bằng giọng văn kể chuyện (Storytelling) mới lạ, hấp dẫn.
+3. **CÔ ĐỌNG NỘI DUNG**: Lược bỏ hoàn toàn các hội thoại rườm rà, chỉ giữ lại diễn biến cốt lõi.
 4. KHÔNG dùng Markdown Code Block (\`\`\`xml). Trả về text thuần.
 
 ---
