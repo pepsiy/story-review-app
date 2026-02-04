@@ -54,8 +54,8 @@ export const generateText = async (prompt: string): Promise<string> => {
             const genAI = new GoogleGenerativeAI(key);
 
             // User requested "Gemini 2.5 Flash"
-            // User requested "Gemini 1.5 Flash" (Corrected from 2.5)
-            const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+            // User requested "Gemini 2.5 Flash"
+            const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 generationConfig: {
@@ -65,10 +65,22 @@ export const generateText = async (prompt: string): Promise<string> => {
                 }
             });
 
+            console.log("----------------------------------------------------------------");
+            console.log("🚀 [AI DEBUG] Sending Prompt to", modelName);
+            console.log("📝 [AI DEBUG] Prompt Preview:", prompt.substring(0, 500) + "\n...\n" + prompt.slice(-500));
+            console.log("----------------------------------------------------------------");
+
             // Set timeout to 180s (3 minutes) for large context
             const result = await withTimeout(model.generateContent(prompt), 180000);
             const response = await result.response;
-            return response.text();
+            const textResponse = response.text();
+
+            console.log("----------------------------------------------------------------");
+            console.log("📥 [AI DEBUG] Received Response Length:", textResponse.length);
+            console.log("📄 [AI DEBUG] Response Preview:", textResponse.substring(0, 500) + "...");
+            console.log("----------------------------------------------------------------");
+
+            return textResponse;
         } catch (error: any) {
             console.error(`❌ AI Generation Error (Attempt ${attempt + 1}/${maxRetries}):`, error.message);
 
