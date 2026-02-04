@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession, signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap, Trophy, Flame } from "lucide-react";
+import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap, Trophy, Flame, Shield } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 
@@ -17,6 +17,7 @@ type Plot = {
     plantedAt: string | null;
     waterCount?: number;
     lastWateredAt?: string | null;
+    protectionExpiresAt?: string | null; // Phase 6: Protection
 };
 
 type InventoryItem = {
@@ -31,6 +32,13 @@ type UserState = {
     gold: number;
     cultivationLevel: string;
     cultivationExp: number;
+    sectId?: string | null;
+    sectRole?: string | null;
+    activeBuffs?: any[]; // Phase 4: Event Buffs
+
+    // Phase 5: Professions
+    professionAlchemyLevel?: number;
+    professionAlchemyExp?: number;
 };
 
 type Mission = {
@@ -59,6 +67,9 @@ type GameState = {
     plots: Plot[];
     inventory: InventoryItem[];
     itemsDef?: any;
+    worldEvents?: string[]; // Phase 4
+};
+worldEvents ?: string[]; // Phase 4
 };
 
 type GameLog = {
@@ -106,7 +117,9 @@ export default function GameClient() {
     const [userMissions, setUserMissions] = useState<UserMission[]>([]);
     const [logs, setLogs] = useState<GameLog[]>([]);
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS' | 'LEADERBOARD'>('FARM');
+    const [sects, setSects] = useState<any[]>([]); // List of sects to join
+    const [mySect, setMySect] = useState<any>(null); // Current sect info
+    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS' | 'LEADERBOARD' | 'SECT'>('FARM');
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -168,6 +181,23 @@ export default function GameClient() {
         } catch (e) { console.error("Fetch LB Error", e); }
     };
 
+    const fetchSects = async () => {
+        try {
+            const res = await fetch(`${API_URL}/game/sect/list`);
+            const data = await res.json();
+            if (Array.isArray(data)) setSects(data);
+        } catch (e) { console.error("Fetch Sects Error", e); }
+    };
+
+    const fetchMySect = async () => {
+        if (!state?.user?.sectId) return;
+        try {
+            const res = await fetch(`${API_URL}/game/sect/info?sectId=${state.user.sectId}`);
+            const data = await res.json();
+            if (data.sect) setMySect(data);
+        } catch (e) { console.error("Fetch My Sect Error", e); }
+    };
+
     useEffect(() => {
         if (status === "loading") return;
 
@@ -183,6 +213,14 @@ export default function GameClient() {
             fetchLeaderboard();
         }
     }, [session, status]);
+
+    useEffect(() => {
+        if (state?.user?.sectId) {
+            fetchMySect();
+        } else {
+            fetchSects();
+        }
+    }, [state?.user?.sectId]);
 
     // --- Actions ---
 
@@ -369,11 +407,29 @@ export default function GameClient() {
         } catch (e) { toast.error("Lỗi kết nối"); }
     };
 
+    const setupProtection = async (plotId: number) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/social/protect`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, plotId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+                fetchState();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
     const breakthrough = async () => {
         if (!session?.user?.id) return;
         try {
             // Confirmation?
-            if (!confirm("Xác suất thất bại sẽ mất EXP. Bạn chắc chắn muốn đột phá?")) return;
+            if (!confirm("Xác suất thất bại sẽ mất EXP. Nếu là Kim Đan trở lên sẽ có Thiên Kiếp (cần Hộ Thân Phù). Bạn chắc chắn muốn đột phá?")) return;
 
             const res = await fetch(`${API_URL}/game/breakthrough`, {
                 method: "POST",
@@ -389,6 +445,65 @@ export default function GameClient() {
                 }
                 fetchState();
                 fetchLogs();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const createSect = async (name: string, description: string) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/sect/create`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, name, description })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success("Thành lập tông môn thành công!");
+                fetchState();
+                fetchMySect();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const joinSect = async (sectId: number) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/sect/join`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, sectId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+                fetchState();
+                fetchMySect();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const leaveSect = async () => {
+        if (!session?.user?.id) return;
+        if (!confirm("Bạn chắc chắn muốn rời tông môn?")) return;
+        try {
+            const res = await fetch(`${API_URL}/game/sect/leave`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+                setMySect(null);
+                fetchState();
+                fetchSects(); // Refresh list to maybe show old sect
             } else {
                 toast.error(data.error);
             }
@@ -495,6 +610,15 @@ export default function GameClient() {
             <div className="aspect-square bg-[#5d4037] rounded border-4 border-[#3e2723] flex flex-col items-center justify-center relative shadow-inner cursor-pointer transition-all hover:scale-[1.02] group"
                 onClick={() => isReady && harvest(plot.id)}
             >
+                {/* Protection Status */}
+                {plot.protectionExpiresAt && new Date(plot.protectionExpiresAt) > new Date() && (
+                    <div className="absolute top-1 left-1 z-30 flex items-center gap-1" title={`Được bảo vệ đến ${new Date(plot.protectionExpiresAt).toLocaleTimeString()}`}>
+                        <div className="bg-blue-600/80 text-white rounded-full p-0.5 border border-blue-300 shadow-sm animate-pulse">
+                            <Shield className="w-3 h-3" />
+                        </div>
+                    </div>
+                )}
+
                 {/* Visual Plant */}
                 <div className="text-4xl animate-bounce-slow z-10" style={{ filter: isReady ? 'none' : 'grayscale(0.2) brightness(0.9)' }}>
                     {seedDef?.icon || '🌱'}
@@ -518,15 +642,30 @@ export default function GameClient() {
                         </div>
 
                         {/* Water Button (Hidden unless hover) */}
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6 bg-blue-500/80 hover:bg-blue-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={(e) => { e.stopPropagation(); waterPlant(plot.id); }}
-                            title="Tưới nước (-10% thời gian)"
-                        >
-                            <span className="text-xs">💧</span>
-                        </Button>
+                        <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-6 w-6 bg-blue-500/80 hover:bg-blue-600 text-white rounded-full"
+                                onClick={(e) => { e.stopPropagation(); waterPlant(plot.id); }}
+                                title="Tưới nước (-10% thời gian)"
+                            >
+                                <span className="text-xs">💧</span>
+                            </Button>
+
+                            {/* Protection Button (Only if not already protected) */}
+                            {(!plot.protectionExpiresAt || new Date(plot.protectionExpiresAt) < new Date()) && (
+                                <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 bg-indigo-500/80 hover:bg-indigo-600 text-white rounded-full"
+                                    onClick={(e) => { e.stopPropagation(); setupProtection(plot.id); }}
+                                    title="Dùng Trận Pháp (Chống trộm 4h)"
+                                >
+                                    <Shield className="w-3 h-3" />
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 )}
 
@@ -547,8 +686,16 @@ export default function GameClient() {
             <div className="max-w-4xl mx-auto space-y-6">
 
                 {/* Header Stats */}
-                <div className="bg-white rounded-xl shadow-sm p-4 border border-green-100">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="bg-white rounded-xl shadow-sm p-4 border border-green-100 relative overflow-hidden">
+                    {/* Event Buffs Display (Phase 4) */}
+                    {state.user.activeBuffs && state.user.activeBuffs.length > 0 && (
+                        <div className="absolute top-0 right-0 left-0 bg-indigo-600 text-white text-[10px] py-1 px-4 flex justify-between items-center animate-pulse z-20">
+                            <span className="font-bold uppercase tracking-widest">⚡ Tác động Thiên Địa: {state.user.activeBuffs.map(b => b.type).join(', ')}</span>
+                            {/* Simple timer visualization if we had expiration */}
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-4 mt-2">
                         <div className="flex items-center gap-3">
                             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xl shadow relative">
                                 {state.user.cultivationLevel[0]}
@@ -616,6 +763,12 @@ export default function GameClient() {
                         className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'LOGS' ? 'bg-white text-slate-700 shadow-sm' : 'bg-slate-800/10 text-slate-800 hover:bg-slate-800/20'}`}
                     >
                         📝 Nhật Ký
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('SECT')}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'SECT' ? 'bg-white text-indigo-700 shadow-sm' : 'bg-indigo-800/10 text-indigo-800 hover:bg-indigo-800/20'}`}
+                    >
+                        ⛩️ Tông Môn
                     </button>
                 </div>
 
@@ -711,47 +864,71 @@ export default function GameClient() {
 
                     {activeTab === 'ALCHEMY' && (
                         <div>
-                            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><FlaskConical className="w-4 h-4" /> Lò Luyện Đan</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {Object.values(state.itemsDef || {}).filter((def: any) => def.ingredients && def.ingredients.length > 0).map((recipe: any) => (
-                                    <div key={recipe.id} className="bg-purple-50 border border-purple-200 rounded-lg p-4 flex flex-col items-center text-center relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 bg-purple-200 text-purple-800 text-xs px-2 py-1 rounded-bl">Cấp 1</div>
-                                        <div className="text-4xl mb-2">{recipe.icon}</div>
-                                        <div className="font-bold text-slate-800">{recipe.name}</div>
-                                        <div className="text-xs text-purple-600 mb-3">Tăng {recipe.exp} Exp</div>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="font-bold text-slate-700 flex items-center gap-2"><FlaskConical className="w-4 h-4" /> Lò Luyện Đan</h3>
 
-                                        <div className="w-full bg-white rounded p-2 mb-3 border border-purple-100 text-sm">
-                                            <div className="text-xs text-slate-500 mb-1">Nguyên Liệu:</div>
-                                            <div className="space-y-1">
-                                                {recipe.ingredients.map((ing: any) => {
-                                                    // Resolve ing definition
-                                                    const ingDef = state.itemsDef?.[ing.itemId];
-                                                    const userHas = state.inventory.find(i => i.itemId === ing.itemId)?.quantity || 0;
-                                                    const isEnough = userHas >= ing.quantity;
-                                                    return (
-                                                        <div key={ing.itemId} className="flex justify-between text-xs">
-                                                            <span>{ingDef?.name || ing.itemId}</span>
-                                                            <span className={isEnough ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
-                                                                {userHas}/{ing.quantity} {isEnough && <Check className="inline w-3 h-3" />}
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                })}
-                                                <div className="flex justify-between text-xs mt-1 pt-1 border-t border-dashed border-slate-200">
-                                                    <span>Phí Luyện</span>
-                                                    <span className={state.user.gold >= 100 ? "text-yellow-600 font-bold" : "text-red-500 font-bold"}>100 Vàng</span>
+                                {/* Profession Status */}
+                                <div className="text-right">
+                                    <div className="text-sm font-bold text-purple-700">Luyện Đan Sư Lv.{state.user.professionAlchemyLevel || 1}</div>
+                                    <div className="w-32 h-2 bg-slate-200 rounded-full overflow-hidden mt-1">
+                                        <div
+                                            className="h-full bg-purple-500 transition-all duration-500"
+                                            style={{ width: `${Math.min(100, ((state.user.professionAlchemyExp || 0) / ((state.user.professionAlchemyLevel || 1) * 100)) * 100)}%` }}
+                                        />
+                                    </div>
+                                    <div className="text-[10px] text-slate-400">
+                                        EXP: {state.user.professionAlchemyExp || 0}/{(state.user.professionAlchemyLevel || 1) * 100}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {Object.values(state.itemsDef || {}).filter((def: any) => def.ingredients && def.ingredients.length > 0).map((recipe: any) => {
+                                    const profLvl = state.user.professionAlchemyLevel || 1;
+                                    const baseChance = 0.5 + (profLvl * 0.05); // Match backend logic
+                                    const chance = Math.min(0.9, baseChance);
+
+                                    return (
+                                        <div key={recipe.id} className="bg-purple-50 border border-purple-200 rounded-lg p-4 flex flex-col items-center text-center relative overflow-hidden group">
+                                            <div className="absolute top-0 right-0 bg-purple-200 text-purple-800 text-xs px-2 py-1 rounded-bl">
+                                                Tỷ lệ: {(chance * 100).toFixed(0)}%
+                                            </div>
+                                            <div className="text-4xl mb-2 group-hover:scale-110 transition-transform">{recipe.icon}</div>
+                                            <div className="font-bold text-slate-800">{recipe.name}</div>
+                                            <div className="text-xs text-purple-600 mb-3">Tăng {recipe.exp} Exp</div>
+
+                                            <div className="w-full bg-white rounded p-2 mb-3 border border-purple-100 text-sm">
+                                                <div className="text-xs text-slate-500 mb-1">Nguyên Liệu:</div>
+                                                <div className="space-y-1">
+                                                    {recipe.ingredients.map((ing: any) => {
+                                                        // Resolve ing definition
+                                                        const ingDef = state.itemsDef?.[ing.itemId];
+                                                        const userHas = state.inventory.find(i => i.itemId === ing.itemId)?.quantity || 0;
+                                                        const isEnough = userHas >= ing.quantity;
+                                                        return (
+                                                            <div key={ing.itemId} className="flex justify-between text-xs">
+                                                                <span>{ingDef?.name || ing.itemId}</span>
+                                                                <span className={isEnough ? "text-green-600 font-bold" : "text-red-500 font-bold"}>
+                                                                    {userHas}/{ing.quantity} {isEnough && <Check className="inline w-3 h-3" />}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    <div className="flex justify-between text-xs mt-1 pt-1 border-t border-dashed border-slate-200">
+                                                        <span>Phí Luyện</span>
+                                                        <span className={state.user.gold >= 100 ? "text-yellow-600 font-bold" : "text-red-500 font-bold"}>100 Vàng</span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        <Button
-                                            className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                                            onClick={() => craftItem(recipe.id)}
-                                        >
-                                            <FlaskConical className="w-4 h-4 mr-1" /> Luyện Đan
-                                        </Button>
-                                    </div>
-                                ))}
+                                            <Button
+                                                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                                                onClick={() => craftItem(recipe.id)}
+                                            >
+                                                <FlaskConical className="w-4 h-4 mr-1" /> Luyện Đan
+                                            </Button>
+                                        </div>
+                                    ))}
                             </div>
                         </div>
                     )}
@@ -810,29 +987,24 @@ export default function GameClient() {
 
                             {/* Available Missions */}
                             <div>
-                                <h4 className="text-sm font-semibold text-orange-700 mb-2">Nhiệm Vụ Khả Dụng</h4>
-                                {missions.filter(m => !userMissions.find(um => um.missionId === m.id)).length === 0 ? (
-                                    <p className="text-slate-400 text-sm italic">Không có nhiệm vụ mới.</p>
+                                <h4 className="text-sm font-semibold text-slate-600 mb-2">Nhiệm Vụ Khả Dụng</h4>
+                                {missions.filter(m => !userMissions.some(um => um.missionId === m.id && um.status === 'IN_PROGRESS')).length === 0 ? (
+                                    <p className="text-slate-400 text-sm italic">Hết nhiệm vụ khả dụng.</p>
                                 ) : (
                                     <div className="space-y-2">
                                         {missions
-                                            .filter(m => !userMissions.find(um => um.missionId === m.id))
+                                            .filter(m => !userMissions.some(um => um.missionId === m.id && um.status === 'IN_PROGRESS'))
                                             .map(mission => (
-                                                <div key={mission.id} className="border border-slate-200 bg-white rounded-lg p-4 hover:shadow-md transition-shadow">
-                                                    <h5 className="font-bold text-slate-800">{mission.title}</h5>
-                                                    <p className="text-xs text-slate-600 mt-1 mb-3">{mission.description}</p>
-                                                    <div className="text-xs text-slate-700 bg-slate-50 p-2 rounded mb-2">
-                                                        Yêu cầu: <span className="font-mono">{mission.requiredQuantity} {mission.requiredItemId}</span>
+                                                <div key={mission.id} className="border border-slate-200 bg-slate-50 rounded-lg p-3 hover:bg-slate-100 transition-colors">
+                                                    <div className="flex justify-between items-center">
+                                                        <div>
+                                                            <h5 className="font-bold text-slate-700 text-sm">{mission.title}</h5>
+                                                            <div className="text-xs text-orange-600 mt-0.5">Thưởng: {mission.rewardGold} Vàng • {mission.rewardExp} Exp</div>
+                                                        </div>
+                                                        <Button size="sm" variant="outline" onClick={() => acceptMission(mission.id)}>
+                                                            Nhận
+                                                        </Button>
                                                     </div>
-                                                    <div className="text-xs text-slate-600 bg-yellow-50 p-2 rounded mb-3">
-                                                        Thưởng: <span className="text-yellow-600 font-bold">{mission.rewardGold} Vàng</span> + <span className="text-blue-600 font-bold">{mission.rewardExp} Exp</span>
-                                                    </div>
-                                                    <Button
-                                                        className="w-full bg-orange-600 hover:bg-orange-700"
-                                                        onClick={() => acceptMission(mission.id)}
-                                                    >
-                                                        Nhận Nhiệm Vụ
-                                                    </Button>
                                                 </div>
                                             ))}
                                     </div>
@@ -885,24 +1057,129 @@ export default function GameClient() {
 
                     {activeTab === 'LOGS' && (
                         <div>
-                            <h3 className="font-bold text-slate-700 mb-4">📜 Nhật Ký Tu Tiên</h3>
-                            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                                {logs.map(log => (
-                                    <div key={log.id} className="bg-white border border-slate-100 p-3 rounded text-sm shadow-sm flex gap-3 items-start">
-                                        <div className="bg-slate-100 p-2 rounded text-xl">
-                                            {log.action === 'WATER' ? '💧' : log.action === 'UNLOCK_PLOT' ? '🔓' : log.action.includes('BREAKTHROUGH') ? '⚡' : '📝'}
+                            <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">📝 Nhật Ký Hoạt Động</h3>
+                            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
+                                {logs.length === 0 ? (
+                                    <p className="text-slate-400 italic text-center py-4">Chưa có hoạt động nào...</p>
+                                ) : (
+                                    logs.map((log) => (
+                                        <div key={log.id} className="text-sm bg-slate-50 p-2 rounded border border-slate-100 flex justify-between gap-4">
+                                            <span className="text-slate-700">{log.description}</span>
+                                            <span className="text-[10px] text-slate-400 whitespace-nowrap" title={new Date(log.createdAt).toLocaleString()}>
+                                                {formatDistanceToNow(new Date(log.createdAt), { addSuffix: true, locale: vi })}
+                                            </span>
                                         </div>
-                                        <div>
-                                            <div className="text-slate-800">{log.description}</div>
-                                            <div className="text-xs text-slate-400 mt-1">{formatDistanceToNow(new Date(log.createdAt), { addSuffix: true, locale: vi })}</div>
-                                        </div>
-                                    </div>
-                                ))}
-                                {logs.length === 0 && <p className="text-slate-400 italic text-center py-4">Chưa có hoạt động nào.</p>}
+                                    ))
+                                )}
                             </div>
                         </div>
                     )}
 
+                    {activeTab === 'SECT' && (
+                        <div className="space-y-6">
+                            <h3 className="font-bold text-slate-700 text-lg mb-4 flex items-center gap-2">⛩️ Tông Môn Thế Gia</h3>
+
+                            {!state.user.sectId ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* Join List */}
+                                    <div>
+                                        <h4 className="font-bold text-slate-600 mb-3">Danh Sách Tông Môn</h4>
+                                        <div className="bg-slate-50 rounded-lg p-3 space-y-2 border border-slate-200 max-h-[400px] overflow-y-auto">
+                                            {sects.length === 0 ? (
+                                                <p className="text-slate-400 italic text-sm text-center py-4">Chưa có tông môn nào...</p>
+                                            ) : (
+                                                sects.map(sect => (
+                                                    <div key={sect.id} className="bg-white p-3 rounded shadow-sm border border-slate-100 flex justify-between items-center hover:bg-blue-50">
+                                                        <div>
+                                                            <div className="font-bold text-indigo-700">{sect.name}</div>
+                                                            <div className="text-xs text-slate-500">{sect.description || "Không có mô tả"}</div>
+                                                            <div className="text-[10px] text-slate-400 mt-1">Cấp {sect.level} • Tài nguyên: {sect.resources}</div>
+                                                        </div>
+                                                        <Button size="sm" onClick={() => joinSect(sect.id)}>Gia Nhập</Button>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Create Form */}
+                                    <div className="bg-white p-4 rounded-lg border border-indigo-100 shadow-sm">
+                                        <h4 className="font-bold text-indigo-700 mb-3">Thành Lập Tông Môn</h4>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="text-xs font-medium text-slate-600">Tên Tông Môn</label>
+                                                <input id="sectName" type="text" className="w-full border rounded p-2 text-sm mt-1" placeholder="Ví dụ: Thanh Vân Môn" />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-medium text-slate-600">Tôn Chỉ (Mô tả)</label>
+                                                <input id="sectDesc" type="text" className="w-full border rounded p-2 text-sm mt-1" placeholder="Quy tụ anh tài..." />
+                                            </div>
+                                            <div className="text-xs text-slate-500">Phí thành lập: <span className="font-bold text-yellow-600">50,000 Vàng</span></div>
+                                            <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white" onClick={() => {
+                                                const name = (document.getElementById('sectName') as HTMLInputElement).value;
+                                                const desc = (document.getElementById('sectDesc') as HTMLInputElement).value;
+                                                createSect(name, desc);
+                                            }}>Khai Tông Lập Phái</Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                // My Sect View
+                                <div>
+                                    {mySect ? (
+                                        <div className="space-y-6">
+                                            {/* Header Info */}
+                                            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white p-6 rounded-xl shadow-lg relative overflow-hidden">
+                                                <div className="relative z-10">
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <h2 className="text-3xl font-bold mb-1">{mySect.sect.name}</h2>
+                                                            <p className="opacity-90 italic text-sm mb-4">{mySect.sect.description}</p>
+                                                            <div className="flex gap-4 text-xs font-bold">
+                                                                <span className="bg-white/20 px-2 py-1 rounded">Cấp {mySect.sect.level}</span>
+                                                                <span className="bg-white/20 px-2 py-1 rounded">Tài nguyên: {mySect.sect.resources}</span>
+                                                                <span className="bg-white/20 px-2 py-1 rounded">Thành viên: {mySect.members?.length}/20</span>
+                                                            </div>
+                                                        </div>
+                                                        <Button variant="destructive" size="sm" onClick={leaveSect} className="bg-red-500/80 hover:bg-red-600 text-white border-0">
+                                                            Rời Tông
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                                <div className="absolute -right-10 -bottom-10 opacity-10 text-9xl">⛩️</div>
+                                            </div>
+
+                                            {/* Members Grid */}
+                                            <div>
+                                                <h4 className="font-bold text-slate-700 mb-3">Thành Viên Tông Môn</h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    {mySect.members?.map((mem: any) => (
+                                                        <div key={mem.id} className="flex items-center gap-3 p-3 bg-white border rounded-lg shadow-sm">
+                                                            <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center overflow-hidden">
+                                                                {mem.image ? <img src={mem.image} alt={mem.name} className="w-full h-full object-cover" /> : '👤'}
+                                                            </div>
+                                                            <div>
+                                                                <div className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                                                    {mem.name}
+                                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${mem.role === 'LEADER' ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'}`}>{mem.role}</span>
+                                                                </div>
+                                                                <div className="text-xs text-blue-600">{mem.cultivationLevel}</div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-10">
+                                            <Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-500 mb-2" />
+                                            <p className="text-slate-500">Đang tải thông tin tông môn...</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

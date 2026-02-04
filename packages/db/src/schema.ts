@@ -123,6 +123,17 @@ export const users = pgTable("user", {
     cultivationLevel: text("cultivation_level").default("Phàm Nhân"), // Cảnh giới: Phàm Nhân, Luyện Khí, Trúc Cơ...
     cultivationExp: integer("cultivation_exp").default(0), // Điểm tu vi
     lastDailyReset: timestamp("last_daily_reset").defaultNow(),
+
+    // Sect info
+    sectId: integer("sect_id"), // Manually linked to sects.id via logic or relation, circular ref issue if FK direct here without careful ordering.
+    sectRole: text("sect_role"), // LEADER, ELDER, MEMBER
+
+    // Phase 4: Event Buffs
+    activeBuffs: text("active_buffs"), // JSON stringified array of { type, value, expireAt, source }
+
+    // Phase 5: Professions
+    professionAlchemyLevel: integer("profession_alchemy_level").default(1),
+    professionAlchemyExp: integer("profession_alchemy_exp").default(0),
 });
 
 export const accounts = pgTable(
@@ -229,6 +240,9 @@ export const farmPlots = pgTable('farm_plots', {
     // New fields for Watering Feature
     waterCount: integer('water_count').default(0),
     lastWateredAt: timestamp('last_watered_at'),
+
+    // Phase 6: Protection Array
+    protectionExpiresAt: timestamp('protection_expires_at'),
 }, (table) => {
     return {
         userPlotIdx: index('user_plot_idx').on(table.userId, table.plotIndex),
@@ -332,6 +346,19 @@ export const friendships = pgTable('friendships', {
     return {
         userTargetIdx: index('user_target_idx').on(table.userId, table.targetUserId),
     };
+});
+
+// Bảng Tông Môn (Sects)
+export const sects = pgTable('sects', {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull().unique(),
+    description: text('description'),
+    leaderId: text('leader_id').references(() => users.id).notNull(),
+
+    level: integer('level').default(1),
+    resources: integer('resources').default(0), // Tài nguyên chung
+
+    createdAt: timestamp('created_at').defaultNow(),
 });
 
 // ==================== AUTO-CRAWL SYSTEM ====================

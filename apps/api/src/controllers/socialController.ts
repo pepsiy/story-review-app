@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from "../../../../packages/db/src";
-import { users, farmPlots, inventory, friendships, gameItems } from "../../../../packages/db/src";
+import { users, farmPlots, inventory, friendships, gameItems, gameLogs } from "../../../../packages/db/src";
 
 // Get another user's farm state (public view)
 export const getOtherUserFarm = async (req: Request, res: Response) => {
@@ -119,6 +119,11 @@ export const stealHarvest = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "Ô đất trống hoặc chưa trồng" });
         }
 
+        // --- Phase 6: Check Protection ---
+        if (plot.protectionExpiresAt && new Date(plot.protectionExpiresAt) > new Date()) {
+            return res.status(400).json({ error: "Vườn thuốc đang được trận pháp bảo vệ! Không thể trộm." });
+        }
+
         // Check if plant is ready
         const seedDef = await db.query.gameItems.findFirst({
             where: eq(gameItems.id, plot.seedId)
@@ -216,5 +221,68 @@ export const stealHarvest = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error("Error stealing harvest:", error);
         res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+// --- Phase 6: Setup Protection ---
+export const setupProtection = async (req: Request, res: Response) => {
+    try {
+        const { userId, plotId } = req.body;
+        const itemId = "item_array_basic"; // Hardcoded for now.
+
+        // Check Item
+        const userItem = await db.query.inventory.findFirst({
+            where: and(eq(inventory.userId, userId), eq(inventory.itemId, itemId))
+        });
+
+        // Temporary: If user doesn't have item, let's just allow it for testing cost GOLD instead?
+        // Or strictly enforce item. Let's enforce item.
+        // If testing, user needs to Buy 'item_array_basic' first.
+        // Hack: Allow buying 'item_array_basic' in shop or give it via seed logic?
+        // Let's assume user has it.
+
+        if (!userItem || userItem.quantity < 1) {
+            return res.status(400).json({ error: "Thiếu 'Trận Pháp Cơ Bản' (item_array_basic)" });
+        }
+
+        const plot = await db.query.farmPlots.findFirst({
+            where: and(eq(farmPlots.id, plotId), eq(farmPlots.userId, userId))
+        });
+
+        if (!plot) return res.status(404).json({ error: "Plot not found" });
+
+        // Duration: 4 Hours
+        const durationMs = 4 * 60 * 60 * 1000;
+        const expiresAt = new Date(Date.now() + durationMs);
+
+        await db.transaction(async (tx) => {
+            // Consume Item
+            if (userItem.quantity === 1) {
+                await tx.delete(inventory).where(eq(inventory.id, userItem.id));
+            } else {
+                await tx.update(inventory)
+                    .set({ quantity: userItem.quantity - 1 })
+                    .where(eq(inventory.id, userItem.id));
+            }
+
+            // Apply Protection
+            await tx.update(farmPlots)
+                .set({ protectionExpiresAt: expiresAt })
+                .where(eq(farmPlots.id, plotId));
+
+            // Log
+            await tx.insert(gameLogs).values({
+                userId,
+                action: 'PROTECT_PLOT',
+                description: `Thiết lập trận pháp cho ô đất số ${plot.plotIndex}`,
+                createdAt: new Date()
+            });
+        });
+
+        res.json({ success: true, message: "Đã thiết lập trận pháp hộ điền! (4 giờ)" });
+
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Failed to set protection" });
     }
 };

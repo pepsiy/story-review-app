@@ -314,28 +314,59 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                     console.warn(`[Crawl Debug] ⚠️ WARN: Output size is very close to input size. Possible copy detected?`);
                 }
 
-                let title = chunkTitle;
-                let shortSummary = "";
-                let fullContent = aiResponseText;
+
 
                 // --- NEW PARSING LOGIC (PIPE DELIMITER) ---
                 const parts = aiResponseText.split("|||");
-                if (parts.length >= 3) {
-                    // Part 1: Title (Remove [] if present)
+
+                // Initialize variables
+                let title = chunkTitle;
+                title = chunkTitle;
+                shortSummary = "";
+                fullContent = "";
+                let gameEvents = [];
+
+                if (parts.length >= 4) {
+                    // Part 1: Title
                     title = parts[0].trim().replace(/^\[+|\]+$/g, '').trim();
                     // Part 2: Short Summary
                     shortSummary = parts[1].trim().replace(/^\[+|\]+$/g, '').trim();
-                    // Part 3: Content (Rest of text)
-                    // If AI put more pipes, join them back or just take the rest?
-                    // Prompt asks for 3 parts. But to be safe, join rest.
+                    // Part 3: Content
+                    fullContent = parts[2].trim().replace(/^\[+|\]+$/g, '').trim();
+                    // Part 4: Game Events
+                    try {
+                        const eventJson = parts[3].trim().replace(/^\[+|\]+$/g, '').trim();
+                        // Sometimes AI wraps it in markdown code block again JSON
+                        const cleanJson = eventJson.replace(/```json/g, '').replace(/```/g, '').trim();
+                        // Add brackets back if removed by regex above but were part of array syntax
+                        // Actually, easier to just parse. regex above removed outer [] needed for array?
+                        // Let's rely on JSON.parse finding the array. 
+                        // If we stripped [], we need to add them back.
+                        // But regex `replace(/^\[+|\]+$/g, '')` removes ALL leading/trailing brackets.
+                        // For JSON array, we WANT brackets.
+
+                        // Re-extract raw from parts to be safe
+                        let rawEvents = parts[3].trim();
+                        // Remove markdown
+                        rawEvents = rawEvents.replace(/```json/g, '').replace(/```/g, '').trim();
+                        gameEvents = JSON.parse(rawEvents);
+
+                        if (!Array.isArray(gameEvents)) gameEvents = [];
+                        console.log(`🎮 [Game Events Detected]`, gameEvents);
+                    } catch (e) {
+                        console.warn("⚠️ Failed to parse Game Events JSON", e);
+                        gameEvents = [];
+                    }
+
+                } else if (parts.length >= 3) {
+                    // Backward compatibility or AI forgot 4th part
+                    title = parts[0].trim().replace(/^\[+|\]+$/g, '').trim();
+                    shortSummary = parts[1].trim().replace(/^\[+|\]+$/g, '').trim();
                     fullContent = parts.slice(2).join("|||").trim().replace(/^\[+|\]+$/g, '').trim();
                 } else {
                     console.warn(`[Crawl Warning] Could not split based on '|||'. Using raw text fallback.`);
-                    // Fallback: If split failed, maybe it's just content?
-                    // Try old XML tags as backup? No, prompt changed.
-                    // Just look for common delimiters or assume failure.
-                    // Let's guess:
                     shortSummary = aiResponseText.substring(0, 300) + "...";
+                    fullContent = aiResponseText;
                 }
 
                 // Fallback for short summary if empty

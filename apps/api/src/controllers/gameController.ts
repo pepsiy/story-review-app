@@ -169,9 +169,40 @@ export const craftItem = async (req: Request, res: Response) => {
             }
         }
 
-        // Logic - Critical Craft (20% chance for x2)
-        const isCrit = Math.random() < 0.2;
-        const craftQty = isCrit ? 2 : 1;
+        // --- Phase 5: Profession & Success Rate ---
+        const alchLevel = user.professionAlchemyLevel || 1;
+        const alchExp = user.professionAlchemyExp || 0;
+
+        // Success Rate: Base 50% + 5% per level (Max 90%)
+        let successChance = 0.5 + (alchLevel * 0.05);
+        if (successChance > 0.9) successChance = 0.9;
+
+        // Crit Chance: Base 10% + 1% per level (Max 30%)
+        let critChance = 0.1 + (alchLevel * 0.01);
+        if (critChance > 0.3) critChance = 0.3;
+
+        const roll = Math.random();
+        const isSuccess = roll < successChance;
+        const isCrit = isSuccess && Math.random() < critChance;
+
+        const craftQty = isSuccess ? (isCrit ? 2 : 1) : 0; // 0 if failed
+
+        // Profession XP logic
+        // Success: +10 XP, Fail: +2 XP
+        const profExpGain = isSuccess ? 10 : 2;
+        let newProfExp = alchExp + profExpGain;
+        let newProfLevel = alchLevel;
+
+        // Level Up Threshold: Level * 100 XP
+        const reqExp = newProfLevel * 100;
+        let levelUpMsg = "";
+
+        if (newProfExp >= reqExp) {
+            newProfLevel++;
+            newProfExp -= reqExp; // Carry over? Or reset? Let's carry over or just set to 0. 
+            // Simple: carry over remnant
+            levelUpMsg = ` (Thăng cấp Luyện Đan Sư lên Lv${newProfLevel}!)`;
+        }
 
         await db.transaction(async (tx) => {
             // Consume Gold
@@ -179,7 +210,7 @@ export const craftItem = async (req: Request, res: Response) => {
                 .set({ gold: (user.gold || 0) - cost })
                 .where(eq(users.id, userId));
 
-            // Consume Ingredients
+            // Consume Ingredients (Always consumed)
             for (const ing of ingredients) {
                 const userInv = await tx.query.inventory.findFirst({
                     where: and(eq(inventory.userId, userId), eq(inventory.itemId, ing.itemId))
@@ -195,36 +226,109 @@ export const craftItem = async (req: Request, res: Response) => {
                 }
             }
 
-            // Grant Item
-            const existing = await tx.query.inventory.findFirst({
-                where: and(eq(inventory.userId, userId), eq(inventory.itemId, itemId))
-            });
-            if (existing) {
-                await tx.update(inventory)
-                    .set({ quantity: existing.quantity + craftQty })
-                    .where(eq(inventory.id, existing.id));
-            } else {
-                await tx.insert(inventory).values({
-                    userId,
-                    itemId,
-                    quantity: craftQty,
-                    type: recipe.type
+            if (isSuccess) {
+                // Grant Item
+                const existing = await tx.query.inventory.findFirst({
+                    where: and(eq(inventory.userId, userId), eq(inventory.itemId, itemId))
                 });
-            }
+                if (existing) {
+                    await tx.update(inventory)
+                        .set({ quantity: existing.quantity + craftQty })
+                        .where(eq(inventory.id, existing.id));
+                } else {
+                    await tx.insert(inventory).values({
+                        userId,
+                        itemId,
+                        quantity: craftQty,
+                        type: recipe.type
+                    });
+                }
 
-            // Grant Exp
-            const expGain = (recipe.exp || 10) * craftQty; // Award EXP per item produced? Or flat? Let's do per craft + bonus
-            await tx.update(users)
-                .set({ cultivationExp: (user.cultivationExp || 0) + expGain })
-                .where(eq(users.id, userId));
+                // Grant Cultivation Exp
+                const expGain = (recipe.exp || 10) * craftQty;
+                await tx.update(users)
+                    .set({
+                        cultivationExp: (user.cultivationExp || 0) + expGain,
+                        professionAlchemyLevel: newProfLevel,
+                        professionAlchemyExp: newProfExp
+                    })
+                    .where(eq(users.id, userId));
+            } else {
+                // Failed: Only update Profession Stats (Fail XP)
+                await tx.update(users)
+                    .set({
+                        professionAlchemyLevel: newProfLevel,
+                        professionAlchemyExp: newProfExp
+                    })
+                    .where(eq(users.id, userId));
+            }
         });
 
-        const msg = isCrit ? `Đại Thành Công! Nhận ${craftQty} ${recipe.name}!` : `Luyện thành công ${recipe.name}`;
-        res.json({ success: true, message: msg });
+        if (isSuccess) {
+            const msg = isCrit
+                ? `Đại Thành Công! Nhận ${craftQty} ${recipe.name}! (+${profExpGain} Nghề Exp)${levelUpMsg}`
+                : `Luyện thành công ${recipe.name}. (+${profExpGain} Nghề Exp)${levelUpMsg}`;
+            res.json({ success: true, message: msg, isCrit, craftQty });
+        } else {
+            res.json({ success: false, message: `Luyện thất bại... (Tốn nguyên liệu, +${profExpGain} Nghề Exp)${levelUpMsg}` });
+        }
 
     } catch (e) {
         console.error(e);
         res.status(500).json({ error: "Crafting failed" });
+    }
+};
+
+// --- Admin / Seeding ---
+import { ITEMS, RECIPES } from "../data/gameData";
+
+export const seedGameData = async (req: Request, res: Response) => {
+    try {
+        const { secret } = req.body;
+        // Simple security check (or rely on admin middleware if exists, but for now simple check)
+        // if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: "Unauthorized" });
+
+        // Sync Items
+        for (const itemKey in ITEMS) {
+            const itemDef = ITEMS[itemKey];
+
+            // Resolve recipe if exists
+            let recipeIngredients = null;
+            if (RECIPES[itemKey]) {
+                recipeIngredients = JSON.stringify(RECIPES[itemKey].ingredients);
+            }
+
+            // Upsert (Postgres specific)
+            // Drizzle doesn't have native upsert in 'query', need 'insert().onConflictDoUpdate'
+            await db.insert(gameItems).values({
+                id: itemDef.id,
+                name: itemDef.name,
+                type: itemDef.type,
+                price: itemDef.price || 0,
+                sellPrice: itemDef.sellPrice || 0,
+                growTime: itemDef.growTime || 0,
+                exp: itemDef.exp || 0,
+                description: itemDef.description,
+                icon: '📦', // Default, frontend handles specific icons mostly or we update DB
+                ingredients: recipeIngredients
+            }).onConflictDoUpdate({
+                target: gameItems.id,
+                set: {
+                    name: itemDef.name,
+                    price: itemDef.price || 0,
+                    sellPrice: itemDef.sellPrice || 0,
+                    growTime: itemDef.growTime || 0,
+                    exp: itemDef.exp || 0,
+                    description: itemDef.description,
+                    ingredients: recipeIngredients
+                }
+            });
+        }
+
+        res.json({ success: true, message: "Game Data Seeded Successfully" });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ error: "Seeding Failed" });
     }
 };
 
@@ -482,28 +586,72 @@ export const attemptBreakthrough = async (req: Request, res: Response) => {
             return res.status(400).json({ error: `Chưa đủ tu vi để đột phá. Cần ${nextLevelDef.exp} Exp.` });
         }
 
+        // --- PHASE 3: TRIBULATION (Thiên Kiếp) ---
+        // From Level 3 (Kim Đan) upwards, tribulation occurs
+        const isTribulation = currentLevelIndex >= 2;
+
+        let chance = currentLevelDef.breakthroughChance || 0.5;
+        let tribulationMsg = "";
+
+        if (isTribulation) {
+            // Check for Protection Item (Hộ Thân Phù - item_talisman_protect)
+            const protectionItem = await db.query.inventory.findFirst({
+                where: and(eq(inventory.userId, userId), eq(inventory.itemId, 'item_talisman_protect'))
+            });
+
+            if (protectionItem && protectionItem.quantity && protectionItem.quantity > 0) {
+                // Use Item to boost chance
+                chance = Math.min(0.9, chance + 0.3); // Boost 30%
+                tribulationMsg = "(Đã dùng Hộ Thân Phù)";
+
+                // Consume Item Logic would go here in a Transaction, but let's keep it simple for now or assume auto-consume
+                // Ideally we should consume it ONLY if we actually attempt.
+            } else {
+                tribulationMsg = "(CẢNH BÁO: Không có Hộ Thân Phù, tỉ lệ thấp!)";
+            }
+        }
+
         // Check Success Rate
-        const chance = currentLevelDef.breakthroughChance || 0.5;
         const roll = Math.random();
         const isSuccess = roll < chance;
 
         if (isSuccess) {
-            await db.update(users)
-                .set({ cultivationLevel: nextLevelDef.name })
-                .where(eq(users.id, userId));
+            await db.transaction(async (tx) => {
+                await tx.update(users)
+                    .set({ cultivationLevel: nextLevelDef.name })
+                    .where(eq(users.id, userId));
 
-            // Log it
-            await db.insert(gameLogs).values({
-                userId,
-                action: 'BREAKTHROUGH_SUCCESS',
-                description: `Đột phá thành công lên ${nextLevelDef.name}!`,
-                createdAt: new Date()
+                // If used talisman, consume it
+                if (isTribulation && tribulationMsg.includes("Đã dùng")) {
+                    // Find again to be safe inside tx
+                    const pItem = await tx.query.inventory.findFirst({
+                        where: and(eq(inventory.userId, userId), eq(inventory.itemId, 'item_talisman_protect'))
+                    });
+                    if (pItem) {
+                        if (pItem.quantity === 1) await tx.delete(inventory).where(eq(inventory.id, pItem.id));
+                        else await tx.update(inventory).set({ quantity: pItem.quantity - 1 }).where(eq(inventory.id, pItem.id));
+                    }
+                }
+
+                // Log it
+                await tx.insert(gameLogs).values({
+                    userId,
+                    action: 'BREAKTHROUGH_SUCCESS',
+                    description: `Đột phá thành công lên ${nextLevelDef.name}! ${tribulationMsg}`,
+                    createdAt: new Date()
+                });
             });
 
-            return res.json({ success: true, message: `Chúc mừng! Đã đột phá lên ${nextLevelDef.name}!` });
+            return res.json({ success: true, message: `Chúc mừng! Đã đột phá lên ${nextLevelDef.name}! ${tribulationMsg}` });
         } else {
             // Failure Penalty: Lose 10% of current EXP
-            const penalty = Math.floor(currentExp * 0.1);
+            // Tribulation Failure: Lose 30% if no protection!
+            let lossPercent = 0.1;
+            if (isTribulation && !tribulationMsg.includes("Đã dùng")) {
+                lossPercent = 0.3; // High penalty for failing Tribulation without protection
+            }
+
+            const penalty = Math.floor(currentExp * lossPercent);
             const newExp = Math.max(0, currentExp - penalty);
 
             await db.update(users)
@@ -514,11 +662,11 @@ export const attemptBreakthrough = async (req: Request, res: Response) => {
             await db.insert(gameLogs).values({
                 userId,
                 action: 'BREAKTHROUGH_FAIL',
-                description: `Đột phá thất bại! Tổn hao ${penalty} tu vi.`,
+                description: `Đột phá thất bại! Tổn hao ${penalty} tu vi. ${tribulationMsg}`,
                 createdAt: new Date()
             });
 
-            return res.json({ success: false, message: `Đột phá thất bại! Bạn bị tâm ma phản phệ, mất ${penalty} Exp.`, newExp });
+            return res.json({ success: false, message: `Đột phá thất bại! Thiên kiếp đánh rớt ${penalty} Exp. ${tribulationMsg}`, newExp });
         }
 
     } catch (e) {
@@ -558,5 +706,47 @@ export const getLogs = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error("Error fetching logs:", error);
         res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+// --- Phase 4: Story Events ---
+export const syncStoryEvent = async (req: Request, res: Response) => {
+    try {
+        const { userId, events } = req.body;
+        // events is string[] from AI, e.g., ["HEAVY_RAIN", "BATTLE"]
+
+        if (!userId || !Array.isArray(events) || events.length === 0) {
+            return res.json({ success: true, message: "No active events" });
+        }
+
+        console.log(`⚡ Syncing Story Events for ${userId}:`, events);
+
+        const durationMinutes = 30;
+        const expireAt = Date.now() + durationMinutes * 60 * 1000;
+
+        // Map events to Buffs
+        const newBuffs = events.map(evt => {
+            switch (evt) {
+                case "HEAVY_RAIN": return { type: "GROWTH_SPEED", value: 1.5, expireAt, source: "Cốt truyện: Mưa Lớn" };
+                case "SUNNY_DAY": return { type: "GROWTH_SPEED", value: 0.8, expireAt, source: "Cốt truyện: Nắng Gắt" };
+                case "BATTLE": return { type: "BREAKTHROUGH_CHANCE", value: 0.2, expireAt, source: "Cốt truyện: Chiến Đấu" };
+                case "AUCTION": return { type: "SHOP_DISCOUNT", value: 0.1, expireAt, source: "Cốt truyện: Đấu Giá" };
+                case "MEDITATION": return { type: "EXP_BOOST", value: 1.2, expireAt, source: "Cốt truyện: Bế Quan" };
+                case "DANGER": return { type: "BREAKTHROUGH_CHANCE", value: -0.2, expireAt, source: "Cốt truyện: Nguy Hiểm" };
+                default: return null;
+            }
+        }).filter(b => b !== null);
+
+        if (newBuffs.length === 0) return res.json({ success: true });
+
+        await db.update(users)
+            .set({ activeBuffs: JSON.stringify(newBuffs) })
+            .where(eq(users.id, userId));
+
+        return res.json({ success: true, message: "Đã kích hoạt sự kiện Thiên Địa!" });
+
+    } catch (e) {
+        console.error("Sync Event Error:", e);
+        res.status(500).json({ error: "Sync failed" });
     }
 };

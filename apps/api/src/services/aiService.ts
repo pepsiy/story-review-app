@@ -288,7 +288,7 @@ export const summarizeChapter = async (
 🛑 **QUY TẮC CHUNG "BẤT KHẢ XÂM PHẠM"**:
 1. **KHÔNG ĐƯỢC COPY** nguyên văn bản gốc.
 2. **SÁNG TẠO**: Phải viết lại bằng giọng văn hoàn toàn mới, sắc sảo và lôi cuốn hơn.
-3. **ĐỊNH DẠNG**: Trả về đúng 3 phần, ngăn cách bởi dấu "|||".
+3. **ĐỊNH DẠNG**: Trả về đúng 4 phần, ngăn cách bởi dấu "|||".
 4. **CẤM**: Không được tự ý thêm các nhãn như "PHẦN 1:", "TÊN CHƯƠNG:", "TÓM TẮT:". Chỉ trả về nội dung của từng phần.
 
 ---
@@ -308,6 +308,20 @@ ${content.substring(0, 100000)}
     - Ví dụ: "Hành Trình Bắt Đầu", "Thử Thách Đầu Tiên", "Định Mệnh Giao Thoa"
 
 |||
+
+**PHẦN 4: SỰ KIỆN GAME (GAME TAGS) - CHO HỆ THỐNG GAME TU TIÊN**
+- Phân tích nội dung chương và trả về danh sách các sự kiện (Tags) để kích hoạt buff/debuff trong game.
+- Định dạng: JSON Array các chuỗi (String).
+- Danh sách sự kiện hợp lệ (Chỉ chọn nếu có tình tiết tương ứng):
+    - "HEAVY_RAIN": Có mưa lớn, bão tố. (Buff: Cây lớn nhanh)
+    - "SUNNY_DAY": Trời nắng đẹp, khô ráo. (Buff: Giảm thu hoạch)
+    - "BATTLE": Có chiến đấu, đánh nhau kịch liệt. (Buff: Tăng tỷ lệ đột phá)
+    - "AUCTION": Có đấu giá, mua bán trao đổi. (Buff: Giảm giá Shop)
+    - "MEDITATION": Nhân vật bế quan, tu luyện, ngồi thiền. (Buff: Tăng EXP nhận được)
+    - "DANGER": Nhân vật gặp nguy hiểm, bị truy sát. (Debuff: Giảm tỷ lệ đột phá)
+- Ví dụ: ["HEAVY_RAIN", "BATTLE"] hoặc [] nếu không có sự kiện nào nổi bật.
+- Chỉ trả về mảng JSON, không thêm text khác.
+
 
 **PHẦN 2: TÓM TẮT NGẮN (SHORT SUMMARY)**
 - Góc độ: **PHÂN TÍCH & CẢM NHẬN** (Review) chứ không chỉ kể lại.

@@ -4,7 +4,7 @@ export const ITEM_TYPES = {
     CONSUMABLE: 'CONSUMABLE', // Pills
 };
 
-export const ITEMS: Record<string, { id: string, name: string, type: string, price?: number, growTime?: number, exp?: number, sellPrice?: number }> = {
+export const ITEMS: Record<string, { id: string, name: string, type: string, price?: number, growTime?: number, exp?: number, sellPrice?: number, description?: string }> = {
     // Seeds
     'seed_linh_thao': { id: 'seed_linh_thao', name: 'Hạt Linh Thảo', type: ITEM_TYPES.SEED, price: 10, growTime: 60 }, // 60s for testing
     'seed_nhan_sam': { id: 'seed_nhan_sam', name: 'Hạt Nhân Sâm', type: ITEM_TYPES.SEED, price: 50, growTime: 300 },
@@ -15,6 +15,10 @@ export const ITEMS: Record<string, { id: string, name: string, type: string, pri
 
     // Pills
     'pill_truc_co': { id: 'pill_truc_co', name: 'Trúc Cơ Đan', type: ITEM_TYPES.CONSUMABLE, price: 1000, exp: 500, sellPrice: 200 },
+
+    // Special
+    'item_talisman_protect': { id: 'item_talisman_protect', name: 'Hộ Thân Phù', type: ITEM_TYPES.CONSUMABLE, price: 5000, description: "Tăng 30% tỉ lệ thành công khi độ kiếp và giảm phạt thất bại.", sellPrice: 2500 },
+    'item_array_basic': { id: 'item_array_basic', name: 'Trận Pháp Cơ Bản', type: ITEM_TYPES.CONSUMABLE, price: 500, description: "Bảo vệ vườn thuốc khỏi đạo tặc trong 4 giờ.", sellPrice: 50 },
 };
 
 // Recipes for Alchemy

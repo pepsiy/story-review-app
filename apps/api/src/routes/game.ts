@@ -11,7 +11,8 @@ import {
     waterPlant,
     getLogs,
     attemptBreakthrough,
-    getLeaderboard
+    getLeaderboard,
+    syncStoryEvent
 } from "../controllers/gameController";
 
 import { getMissions, acceptMission, completeMission } from "../controllers/missionController";
@@ -47,5 +48,24 @@ router.post("/missions/complete", completeMission);
 // Social Extended Routes
 router.post("/visit-farm", getOtherUserFarm);
 router.post("/steal", stealHarvest);
+
+// Phase 3: Sects (Meta Game)
+import { createSect, joinSect, leaveSect, getSectInfo, getSects } from "../controllers/sectController";
+router.post("/sect/create", createSect);
+router.post("/sect/join", joinSect);
+router.post("/sect/leave", leaveSect);
+router.get("/sect/info", getSectInfo);
+router.get("/sect/list", getSects);
+
+// Phase 4: Story Events
+router.post("/event/sync", syncStoryEvent);
+
+// Phase 6: Social Protection
+import { setupProtection } from "../controllers/socialController";
+router.post("/social/protect", setupProtection);
+
+// Admin / Seed
+import { seedGameData } from "../controllers/gameController";
+router.post("/admin/seed", seedGameData);
 
 export default router;
