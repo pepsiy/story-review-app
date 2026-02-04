@@ -294,15 +294,36 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
             {/* Controls */}
             <div className="flex gap-2 flex-wrap items-center bg-gray-50 p-3 rounded-lg border">
                 <div className="flex gap-2 mr-auto">
-                    <Button
-                        onClick={() => processBatch(1)}
-                        disabled={processing || job.status === 'processing' || job.status === 'completed'}
-                        size="sm"
-                        className="bg-indigo-600 hover:bg-indigo-700"
-                    >
-                        {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
-                        Chạy Ngay (1 Batch - Debug)
-                    </Button>
+                    <div className="flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 transition-colors border border-indigo-200 rounded-md p-1">
+                        <Button
+                            onClick={() => processBatch(1)}
+                            disabled={processing || job.status === 'processing' || job.status === 'completed'}
+                            size="sm"
+                            className="h-7 px-3 bg-indigo-600 hover:bg-indigo-700 text-xs"
+                            title="Debug: Chạy 1 batch (5 chương)"
+                        >
+                            {processing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <PlayCircle className="mr-1 h-3 w-3" />}
+                            1 Batch
+                        </Button>
+                        <Button
+                            onClick={() => processBatch(5)}
+                            disabled={processing || job.status === 'processing' || job.status === 'completed'}
+                            size="sm"
+                            className="h-7 px-3 bg-indigo-600 hover:bg-indigo-700 text-xs"
+                            title="Chạy 5 batches (25 chương)"
+                        >
+                            5
+                        </Button>
+                        <Button
+                            onClick={() => processBatch(10)}
+                            disabled={processing || job.status === 'processing' || job.status === 'completed'}
+                            size="sm"
+                            className="h-7 px-3 bg-indigo-600 hover:bg-indigo-700 text-xs"
+                            title="Chạy 10 batches (50 chương)"
+                        >
+                            10
+                        </Button>
+                    </div>
 
                     {job.status === 'processing' ? (
                         <Button onClick={pauseJob} variant="destructive" size="sm">
