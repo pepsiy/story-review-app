@@ -183,28 +183,41 @@ ${content.substring(0, 100000)}
 ⚠️ **YÊU CẦU ĐẦU RA CHI TIẾT** (Phải tuân thủ tuyệt đối từng mục):
 
 **PHẦN 1: TÊN CHƯƠNG MỚI**
-- Tiêu chí: Ngắn gọn, súc tích, gợi mở sự tò mò (Tối đa 5-8 từ).
-- 🚫 Cấm: Không được dùng số thứ tự (1, 2, 3...) hoặc từ "Chương".
-- Ví dụ: "Định Mệnh Giao Thoa", "Cơn Thịnh Nộ Của Rồng".
+- Dựa vào nội dung tóm tắt, hãy tạo một TÊN CHƯƠNG ngắn gọn, súc tích (tối đa 5-8 từ).
+- Yêu cầu:
+    - Tên chương phải GỢI TỚI nội dung chính của chương
+    - Ngắn gọn, dễ nhớ, hấp dẫn
+    - KHÔNG dùng số thứ tự (VD: "Chương 1", "Phần 1")
+    - KHÔNG dùng từ "Chương" trong tên
+    - Ví dụ: "Hành Trình Bắt Đầu", "Thử Thách Đầu Tiên", "Định Mệnh Giao Thoa"
 
 |||
 
 **PHẦN 2: TÓM TẮT NGẮN (SHORT SUMMARY)**
-- Góc độ: **PHÂN TÍCH & CẢM NHẬN** (Review) chứ không chỉ kể lại.
-- Nội dung: Tập trung vào tâm lý nhân vật, ý nghĩa sự kiện và nghệ thuật kể chuyện.
-- Độ dài: 3-5 câu.
-- Mở đầu gợi ý: "Chương truyện khắc họa...", "Bi kịch bắt đầu khi...", "Tác giả khéo léo..." (Không bắt buộc, nhưng cấm mở đầu kiểu "Chương này nói về...").
+- Hãy viết một đoạn TÓM TẮT NGẮN (Short Summary) dưới góc độ PHÂN TÍCH/CẢM NHẬN.
+- Yêu cầu:
+    - Tập trung vào ý nghĩa, cảm xúc nhân vật, và nghệ thuật kể chuyện.
+    - Bắt đầu bằng những câu như: "Chương truyện khắc họa...", "Bi kịch của nhân vật bắt đầu...", "Tác giả khéo léo lồng ghép..."
+    - TUYỆT ĐỐI KHÔNG bắt đầu bằng: "Chương truyện giới thiệu...", "Chương này nói về..."
+    - Độ dài: 3-5 câu.
 
 |||
 
 **PHẦN 3: NỘI DUNG VIẾT LẠI (REWRITE CONTENT)**
-- **MỤC TIÊU**: Biến chương truyện thành một bài **REVIEW KỂ CHUYỆN** (Storytelling Review).
-- **ĐỘ DÀI**: CÔ ĐỌNG, chỉ giữ lại diễn biến cốt lõi (khoảng 40-50% dung lượng gốc). Cắt bỏ hội thoại lôi thôi.
-- **PHONG CÁCH**: Nhịp điệu NHANH, dồn dập. Dùng từ ngữ gợi hình mạnh.
-- **CẤU TRÚC**:
-   + **Mở đầu bắt buộc**: *"Đây là bản tóm tắt và cảm nhận nội dung, không thay thế tác phẩm gốc."*
-   + **Thân bài**: Kể lại các sự kiện chính bằng giọng văn của một người đang kể chuyện say sưa.
-   + **Kết thúc**: Dừng lại ĐỘT NGỘT ngay tại cao trào (Cliffhanger). 🚫 KHÔNG viết đoạn kết luận/nhận xét cuối bài.
+- Bạn là một tiểu thuyết gia. Hãy TÓM LƯỢC & VIẾT LẠI nội dung này thành một bài Review cuốn hút.
+- **MỤC TIÊU QUAN TRỌNG:**
+    - **ĐỘ DÀI:** Chỉ giữ lại khoảng **40-50%** dung lượng so với bản gốc. CÔ ĐỌNG, không lan man.
+    - **BỎ QUA:** Các hội thoại rườm rà, chi tiết mô tả không cần thiết.
+    - **TẬP TRUNG:** Chỉ kể lại các sự kiện chính (Key Events) và cao trào.
+- **TUÂN THỦ PHÁP LÝ:**
+    1. **KHÔNG COPY** nguyên văn bản gốc.
+    2. Viết lại 100% bằng giọng văn mới.
+    3. BẮT BUỘC mở đầu bằng: *"Đây là bài tóm tắt và cảm nhận nội dung, không thay thế tác phẩm gốc."*
+- **PHONG CÁCH VIẾT:**
+    - Nhịp điệu NHANH, lôi cuốn.
+    - Dùng từ ngữ gợi hình để thay thế cho các đoạn tả dài dòng.
+    - Kết thúc: Dừng lại ĐỘT NGỘT ngay tại hành động/câu thoại cao trào nhất.
+    - 🚫 **CẤM TUYỆT ĐỐI**: Không viết đoạn kết luận/nhận xét cuối bài.
 
 👇 **XỬ LÝ VÀ TRẢ VỀ KẾT QUẢ NGAY BÊN DƯỚI**:`;
 
