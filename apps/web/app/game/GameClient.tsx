@@ -5,6 +5,8 @@ import { useSession, signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { vi } from "date-fns/locale";
 
 // Types
 type Plot = {
@@ -13,6 +15,8 @@ type Plot = {
     isUnlocked: boolean;
     seedId: string | null;
     plantedAt: string | null;
+    waterCount?: number;
+    lastWateredAt?: string | null;
 };
 
 type InventoryItem = {
@@ -57,9 +61,24 @@ type GameState = {
     itemsDef?: any;
 };
 
-// --- Game Data (Mirrored from Backend for UI) ---
-// Note: Now fetched dynamically from API
+type GameLog = {
+    id: number;
+    userId: string;
+    targetUserId?: string;
+    action: string;
+    description: string;
+    createdAt: string;
+};
 
+// Constants
+const PLOT_UNLOCK_COSTS: Record<number, number> = {
+    3: 1000,
+    4: 5000,
+    5: 20000,
+    6: 50000,
+    7: 100000,
+    8: 500000
+};
 
 export default function GameClient() {
     const { data: session, status } = useSession();
@@ -67,7 +86,8 @@ export default function GameClient() {
     const [state, setState] = useState<GameState | null>(null);
     const [missions, setMissions] = useState<Mission[]>([]);
     const [userMissions, setUserMissions] = useState<UserMission[]>([]);
-    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS'>('FARM');
+    const [logs, setLogs] = useState<GameLog[]>([]);
+    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS'>('FARM');
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -108,6 +128,17 @@ export default function GameClient() {
         }
     };
 
+    const fetchLogs = async () => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/logs?userId=${session.user.id}`);
+            const data = await res.json();
+            if (Array.isArray(data)) {
+                setLogs(data);
+            }
+        } catch (e) { console.error("Fetch Logs Error", e); }
+    };
+
     useEffect(() => {
         if (status === "loading") return;
 
@@ -119,6 +150,7 @@ export default function GameClient() {
         if (session?.user?.id) {
             fetchState();
             fetchMissions();
+            fetchLogs();
         }
     }, [session, status]);
 
@@ -269,6 +301,44 @@ export default function GameClient() {
         } catch (e) { toast.error("Lỗi kết nối"); }
     };
 
+    const unlockSlot = async (plotIndex: number) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/unlock-slot`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, plotIndex })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+                fetchState();
+                fetchLogs();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const waterPlant = async (targetPlotId: number) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/water`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: session.user.id, targetPlotId })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                toast.success(data.message);
+                fetchState();
+                fetchLogs();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
     if (status === "loading" || (loading && status === "authenticated")) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] bg-slate-50">
@@ -300,21 +370,44 @@ export default function GameClient() {
     // --- Render Helpers ---
 
     const renderPlot = (plot: Plot) => {
-        if (!plot.isUnlocked) return <div className="aspect-square bg-stone-300 rounded flex items-center justify-center opacity-50 cursor-not-allowed border-2 border-stone-400">🔒</div>;
+        if (!plot.isUnlocked) {
+            const cost = PLOT_UNLOCK_COSTS[plot.plotIndex];
+            const canAfford = state.user.gold >= (cost || 999999);
+
+            return (
+                <div className="aspect-square bg-stone-200 rounded flex flex-col items-center justify-center border-2 border-stone-300 relative group overflow-hidden">
+                    <div className="text-2xl mb-1 opacity-50">🔒</div>
+                    {cost && (
+                        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity p-2">
+                            <div className="text-white text-xs font-bold mb-2">Mở khóa?</div>
+                            <div className="text-yellow-400 font-bold text-sm mb-2">{cost.toLocaleString()} V</div>
+                            <Button
+                                size="sm"
+                                variant={canAfford ? "default" : "destructive"}
+                                className="h-6 text-[10px]"
+                                onClick={() => unlockSlot(plot.plotIndex)}
+                                disabled={!canAfford}
+                            >
+                                {canAfford ? "Mở Ngay" : "Thiếu Vàng"}
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
 
         if (!plot.seedId) {
-            // Empty -> Show Plant Button (if has seeds)
             const seedInventory = state.inventory.filter(i => i.type === 'SEED' && i.quantity > 0);
             return (
                 <div className="aspect-square bg-[#7c5c44] rounded border-4 border-[#5d4037] flex flex-col items-center justify-center relative overflow-hidden shadow-inner group">
                     <div className="absolute inset-0 bg-black/10 pointer-events-none" />
                     <span className="text-xs text-stone-200 mb-2">Đất Trống</span>
                     {seedInventory.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-1 p-1">
+                        <div className="grid grid-cols-2 gap-1 p-1 z-10">
                             {seedInventory.map(seed => {
                                 const def = state.itemsDef?.[seed.itemId];
                                 return (
-                                    <button key={seed.itemId} onClick={() => plantSeed(plot.id, seed.itemId)} className="bg-green-600 hover:bg-green-700 text-white text-[10px] p-1 rounded">
+                                    <button key={seed.itemId} onClick={() => plantSeed(plot.id, seed.itemId)} className="bg-green-600 hover:bg-green-700 text-white text-[10px] p-1 rounded shadow-sm transition-transform hover:scale-105 active:scale-95">
                                         Gieo {def?.name || seed.itemId}
                                     </button>
                                 );
@@ -328,35 +421,64 @@ export default function GameClient() {
         }
 
         const seedDef = state.itemsDef?.[plot.seedId];
-        const growTimeMs = (seedDef?.growTime || 60) * 1000;
+        const baseGrowTimeMs = (seedDef?.growTime || 60) * 1000;
+
+        // Water Logic
+        const waterCount = plot.waterCount || 0;
+        const reductionMs = baseGrowTimeMs * waterCount * 0.1; // 10% per water
+        const finalGrowTimeMs = Math.max(0, baseGrowTimeMs - reductionMs);
+
         const elapsed = plot.plantedAt ? Date.now() - new Date(plot.plantedAt).getTime() : 0;
-        const progress = Math.min(100, (elapsed / growTimeMs) * 100);
+        const progress = Math.min(100, (elapsed / finalGrowTimeMs) * 100);
         const isReady = progress >= 100;
 
         return (
-            <div className="aspect-square bg-[#5d4037] rounded border-4 border-[#3e2723] flex flex-col items-center justify-center relative shadow-inner cursor-pointer transition-all hover:scale-[1.02]"
+            <div className="aspect-square bg-[#5d4037] rounded border-4 border-[#3e2723] flex flex-col items-center justify-center relative shadow-inner cursor-pointer transition-all hover:scale-[1.02] group"
                 onClick={() => isReady && harvest(plot.id)}
             >
                 {/* Visual Plant */}
-                <div className="text-4xl animate-bounce-slow" style={{ filter: isReady ? 'none' : 'grayscale(0.5) brightness(0.8)' }}>
+                <div className="text-4xl animate-bounce-slow z-10" style={{ filter: isReady ? 'none' : 'grayscale(0.2) brightness(0.9)' }}>
                     {seedDef?.icon || '🌱'}
                 </div>
 
                 {/* Progress Bar */}
                 {!isReady && (
-                    <div className="absolute bottom-2 left-2 right-2 h-1.5 bg-black/50 rounded-full overflow-hidden">
+                    <div className="absolute bottom-2 left-2 right-2 h-1.5 bg-black/50 rounded-full overflow-hidden z-20">
                         <div className="h-full bg-green-500 transition-all duration-1000" style={{ width: `${progress}%` }} />
                     </div>
                 )}
 
+                {/* Water Info / Action */}
+                {!isReady && (
+                    <div className="absolute top-1 right-1 z-30 flex flex-col gap-1 items-end">
+                        {/* Droplets */}
+                        <div className="flex gap-0.5">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className={`w-2 h-2 rounded-full border border-blue-300 ${i <= waterCount ? 'bg-blue-500' : 'bg-black/30'}`} />
+                            ))}
+                        </div>
+
+                        {/* Water Button (Hidden unless hover) */}
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 bg-blue-500/80 hover:bg-blue-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => { e.stopPropagation(); waterPlant(plot.id); }}
+                            title="Tưới nước (-10% thời gian)"
+                        >
+                            <span className="text-xs">💧</span>
+                        </Button>
+                    </div>
+                )}
+
                 {isReady && (
-                    <div className="absolute top-1 right-1">
+                    <div className="absolute top-1 right-1 z-20">
                         <span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-yellow-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
                     </div>
                 )}
 
-                {isReady && <div className="absolute inset-0 flex items-center justify-center bg-black/20 text-white font-bold text-xs opacity-0 hover:opacity-100 transition-opacity">Thu Hoạch!</div>}
+                {isReady && <div className="absolute inset-0 flex items-center justify-center bg-black/20 text-white font-bold text-xs opacity-0 hover:opacity-100 transition-opacity z-40 rounded">Thu Hoạch!</div>}
             </div>
         );
     };
@@ -410,6 +532,12 @@ export default function GameClient() {
                         className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'MISSIONS' ? 'bg-white text-orange-700 shadow-sm' : 'bg-orange-800/10 text-orange-800 hover:bg-orange-800/20'}`}
                     >
                         📜 Bảng Cáo Thị
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('LOGS')}
+                        className={`px-6 py-2 rounded-t-lg font-bold flex items-center gap-2 transition-colors ${activeTab === 'LOGS' ? 'bg-white text-slate-700 shadow-sm' : 'bg-slate-800/10 text-slate-800 hover:bg-slate-800/20'}`}
+                    >
+                        📝 Nhật Ký
                     </button>
                 </div>
 
@@ -631,6 +759,26 @@ export default function GameClient() {
                                             ))}
                                     </div>
                                 )}
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'LOGS' && (
+                        <div>
+                            <h3 className="font-bold text-slate-700 mb-4">📜 Nhật Ký Tu Tiên</h3>
+                            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                                {logs.map(log => (
+                                    <div key={log.id} className="bg-white border border-slate-100 p-3 rounded text-sm shadow-sm flex gap-3 items-start">
+                                        <div className="bg-slate-100 p-2 rounded text-xl">
+                                            {log.action === 'WATER' ? '💧' : log.action === 'UNLOCK_PLOT' ? '🔓' : '📝'}
+                                        </div>
+                                        <div>
+                                            <div className="text-slate-800">{log.description}</div>
+                                            <div className="text-xs text-slate-400 mt-1">{formatDistanceToNow(new Date(log.createdAt), { addSuffix: true, locale: vi })}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                                {logs.length === 0 && <p className="text-slate-400 italic text-center py-4">Chưa có hoạt động nào.</p>}
                             </div>
                         </div>
                     )}
