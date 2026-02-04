@@ -193,7 +193,13 @@ ${content.substring(0, 100000)}
 Bắt đầu viết (Ngắn gọn, súc tích):`;
 
         console.log("👉 [Step 1/3] Generating Rewrite...");
+        // Log Input for verification
+        console.log("📝 [Step 1 Input Preview]:", content.substring(0, 500));
+
         const rewriteText = await generateText(rewritePrompt);
+
+        // Log Output for verification
+        console.log("📄 [Step 1 Output Preview]:", rewriteText.substring(0, 500));
         console.log(`✅ [Step 1/3] Rewrite Done. Length: ${rewriteText.length}`);
 
         // --- STEP 2: GENERATE SHORT SUMMARY ---
