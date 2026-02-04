@@ -167,78 +167,67 @@ export const summarizeChapter = async (
     }
 
     try {
-        // 3-Step Pipeline (Matching Manual Mode)
-        console.log(`[AI-Service] 🚀 Starting 3-Step Pipeline for: ${title}`);
+        console.log(`[AI-Service] 🚀 Starting Single-Request Mega-Pipeline for: ${title}`);
 
-        // --- STEP 1: SHORT SUMMARY (ANALYSIS) ---
-        const summaryPrompt = `Hãy viết một đoạn TÓM TẮT NGẮN (Short Summary) dưới góc độ PHÂN TÍCH/CẢM NHẬN cho nội dung sau:
+        const prompt = `Bạn là một tiểu thuyết gia và biên tập viên tài năng. Nhiệm vụ của bạn là thực hiện 3 yêu cầu xử lý văn bản chuyên sâu cho nội dung bên dưới (được gộp từ ${title}).
 
+---
+🛑 **QUY TẮC CHUNG "BẤT KHẢ XÂM PHẠM"**:
+1. **KHÔNG ĐƯỢC COPY** nguyên văn bản gốc.
+2. **SÁNG TẠO**: Phải viết lại bằng giọng văn hoàn toàn mới, sắc sảo và lôi cuốn hơn.
+3. **ĐỊNH DẠNG**: Trả về đúng 3 phần, ngăn cách bởi dấu "|||".
+4. **CẤM**: Không được tự ý thêm các nhãn như "PHẦN 1:", "TÊN CHƯƠNG:", "TÓM TẮT:". Chỉ trả về nội dung của từng phần.
+
+---
+📝 **Nội Dung Gốc**:
 ${content.substring(0, 100000)}
 
-Yêu cầu:
-- Tập trung vào ý nghĩa, cảm xúc nhân vật, và nghệ thuật kể chuyện.
-- Bắt đầu bằng những câu như: "Chương truyện khắc họa...", "Bi kịch của nhân vật bắt đầu...", "Tác giả khéo léo lồng ghép..."
-- TUYỆT ĐỐI KHÔNG bắt đầu bằng: "Chương truyện giới thiệu...", "Chương này nói về..."
-- Độ dài: 3-5 câu.`;
+---
+⚠️ **YÊU CẦU ĐẦU RA CHI TIẾT** (Phải tuân thủ tuyệt đối từng mục):
 
-        console.log("👉 [Step 1/3] Generating Short Summary...");
-        const shortSummary = await generateText(summaryPrompt);
-        console.log(`✅ [Step 1/3] Done. Summary: ${shortSummary.substring(0, 50)}...`);
+**PHẦN 1: TÊN CHƯƠNG MỚI**
+- Tiêu chí: Ngắn gọn, súc tích, gợi mở sự tò mò (Tối đa 5-8 từ).
+- Yêu cầu:
+    - Tên chương phải GỢI TỚI nội dung chính của chương
+    - Ngắn gọn, dễ nhớ, hấp dẫn
+    - KHÔNG dùng số thứ tự (VD: "Chương 1", "Phần 1")
+    - KHÔNG dùng từ "Chương" trong tên
+    - Ví dụ: "Hành Trình Bắt Đầu", "Thử Thách Đầu Tiên", "Định Mệnh Giao Thoa"
 
-        // --- STEP 2: REWRITE CONTENT (STORYTELLING) ---
-        const rewritePrompt = `Bạn là một tiểu thuyết gia. Hãy TÓM LƯỢC & VIẾT LẠI nội dung này thành một bài Review cuốn hút.
+|||
 
-**⚠️ MỤC TIÊU QUAN TRỌNG:**
-- **ĐỘ DÀI:** Chỉ giữ lại khoảng **40-50%** dung lượng so với bản gốc. CÔ ĐỌNG, không lan man.
-- **BỎ QUA:** Các hội thoại rườm rà, chi tiết mô tả không cần thiết.
-- **TẬP TRUNG:** Chỉ kể lại các sự kiện chính (Key Events) và cao trào.
+**PHẦN 2: TÓM TẮT NGẮN (SHORT SUMMARY)**
+- Góc độ: **PHÂN TÍCH & CẢM NHẬN** (Review) chứ không chỉ kể lại.
+- Yêu cầu:
+    - Tập trung vào ý nghĩa, cảm xúc nhân vật, và nghệ thuật kể chuyện.
+    - Bắt đầu bằng những câu như: "Chương truyện khắc họa...", "Bi kịch của nhân vật bắt đầu...", "Tác giả khéo léo lồng ghép..."
+    - TUYỆT ĐỐI KHÔNG bắt đầu bằng: "Chương truyện giới thiệu...", "Chương này nói về..."
+    - Độ dài: 3-5 câu.
 
-**⚠️ TUÂN THỦ PHÁP LÝ:**
-1. **KHÔNG COPY** nguyên văn bản gốc.
-2. Viết lại 100% bằng giọng văn mới.
-3. BẮT BUỘC mở đầu bằng: *"Đây là bài tóm tắt và cảm nhận nội dung, không thay thế tác phẩm gốc."*
+|||
 
-**PHONG CÁCH VIẾT:**
-- Nhịp điệu NHANH, lôi cuốn.
-- Dùng từ ngữ gợi hình để thay thế cho các đoạn tả dài dòng.
-- Kết thúc: Dừng lại ĐỘT NGỘT ngay tại hành động/câu thoại cao trào nhất.
-- 🚫 **CẤM TUYỆT ĐỐI**: Không viết đoạn kết luận/nhận xét cuối bài.
+**PHẦN 3: NỘI DUNG VIẾT LẠI (REWRITE CONTENT)**
+- **MỤC TIÊU**: Biến chương truyện thành một bài **REVIEW KỂ CHUYỆN** (Storytelling Review).
+- **ĐỘ DÀI**: CÔ ĐỌNG, chỉ giữ lại diễn biến cốt lõi (khoảng 40-50% dung lượng gốc). Cắt bỏ hội thoại lôi thôi.
+- **PHONG CÁCH**: Nhịp điệu NHANH, dồn dập. Dùng từ ngữ gợi hình mạnh.
+- **CẤU TRÚC**:
+   + **Mở đầu bắt buộc**: *"Đây là bản tóm tắt và cảm nhận nội dung, không thay thế tác phẩm gốc."*
+   + **Thân bài**: Kể lại các sự kiện chính bằng giọng văn của một người đang kể chuyện say sưa.
+   + **Kết thúc**: Dừng lại ĐỘT NGỘT ngay tại cao trào (Cliffhanger). 🚫 KHÔNG viết đoạn kết luận/nhận xét cuối bài.
 
-Nội dung gốc:
-${content.substring(0, 100000)}
+👇 **TRẢ VỀ KẾT QUẢ NGAY BÊN DƯỚI (Chỉ nội dung, không kèm tiêu đề phần)**:`;
 
-Bắt đầu viết (Ngắn gọn, súc tích):`;
+        console.log("👉 [AI-Service] Sending Mega-Prompt...");
+        // Log Input for verification - FULL PROMPT LOG as requested
+        console.log("📝 [DEBUG] FULL PROMPT SENT:\n", prompt);
 
-        console.log("👉 [Step 2/3] Generating Rewrite...");
-        const rewriteText = await generateText(rewritePrompt);
-        console.log(`✅ [Step 2/3] Done. Length: ${rewriteText.length}`);
+        const result = await generateText(prompt);
 
-        // --- STEP 3: TITLE (BASED ON SUMMARY) ---
-        const titlePrompt = `Dựa vào nội dung tóm tắt sau, hãy tạo một TÊN CHƯƠNG ngắn gọn, súc tích (tối đa 5-8 từ).
+        // Log Output for verification
+        console.log("📄 [DEBUG] RAW AI OUTPUT:\n", result);
+        console.log(`✅ [AI-Service] Done. Length: ${result.length}`);
 
-Tóm tắt:
-${shortSummary}
-
-Yêu cầu:
-- Tên chương phải GỢI TỚI nội dung chính của chương
-- Ngắn gọn, dễ nhớ, hấp dẫn
-- KHÔNG dùng số thứ tự (VD: "Chương 1", "Phần 1")
-- KHÔNG dùng từ "Chương" trong tên
-- Ví dụ: "Hành Trình Bắt Đầu", "Thử Thách Đầu Tiên", "Định Mệnh Giao Thoa"
-
-Chỉ trả về TÊN CHƯƠNG, không giải thích:`;
-
-        console.log("👉 [Step 3/3] Generating Title...");
-        let generatedTitle = await generateText(titlePrompt);
-        generatedTitle = generatedTitle.replace(/^["']|["']$/g, '').trim(); // Remove quotes
-        console.log(`✅ [Step 3/3] Done. Title: ${generatedTitle}`);
-
-        // --- COMBINE RESULTS (PIPE FORMAT) ---
-        // Format: Title ||| Summary ||| Rewrite
-        const finalOutput = `${generatedTitle} ||| ${shortSummary} ||| ${rewriteText}`;
-
-        console.log("📦 [AI-Service] Pipeline completed. Returning pipe-delimited output.");
-        return finalOutput;
+        return result.trim();
 
     } catch (error: any) {
         console.error("❌ Error in AI Pipeline:", error);
