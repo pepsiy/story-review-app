@@ -38,6 +38,14 @@ export const generateText = async (prompt: string): Promise<string> => {
     // Reset index if out of bounds (keys changed)
     if (currentKeyIndex >= keys.length) currentKeyIndex = 0;
 
+    // Helper: Timeout wrapper
+    const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
+        return Promise.race([
+            promise,
+            new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms))
+        ]);
+    };
+
     while (attempt < maxRetries) {
         try {
             const key = keys[currentKeyIndex];
@@ -49,15 +57,16 @@ export const generateText = async (prompt: string): Promise<string> => {
             const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
             const model = genAI.getGenerativeModel({ model: modelName });
 
-            const result = await model.generateContent(prompt);
+            // Set timeout to 180s (3 minutes) for large context
+            const result = await withTimeout(model.generateContent(prompt), 180000);
             const response = await result.response;
             return response.text();
         } catch (error: any) {
             console.error(`❌ AI Generation Error (Attempt ${attempt + 1}/${maxRetries}):`, error.message);
 
-            // Check for quota/rate limit errors (429 usually)
-            if (error.message?.includes("429") || error.status === 429 || error.message?.includes("quota")) {
-                console.warn("⚠️ Quota exceeded for current key. Switching key...");
+            // Check for quota/rate limit errors (429 usually) or Timeout
+            if (error.message?.includes("429") || error.status === 429 || error.message?.includes("quota") || error.message?.includes("Timeout")) {
+                console.warn("⚠️ Quota exceeded or Timeout. Switching key/Retrying...");
                 currentKeyIndex = (currentKeyIndex + 1) % keys.length; // Rotate
                 attempt++;
             } else {

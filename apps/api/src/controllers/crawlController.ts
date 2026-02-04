@@ -155,12 +155,18 @@ export const processBatch = async (req: Request, res: Response) => {
         }
 
         if (job.status === 'processing') {
-            return res.status(400).json({ error: "Job is already processing" });
+            // Check if stuck (last processed > 5 minutes ago)
+            const lastProcessed = job.lastProcessedAt ? new Date(job.lastProcessedAt).getTime() : 0;
+            const now = Date.now();
+            if (now - lastProcessed < 5 * 60 * 1000) {
+                return res.status(400).json({ error: "Job is already processing (and active)" });
+            }
+            console.warn(`Job ${jobId} appears stuck. Resuming...`);
         }
 
         // Update status to processing
         await db.update(crawlJobs)
-            .set({ status: 'processing' })
+            .set({ status: 'processing', lastProcessedAt: new Date() })
             .where(eq(crawlJobs.id, parseInt(jobId)));
 
         // Get work info
@@ -244,14 +250,23 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
 
         // Process each chunk
         for (const chunk of chunks) {
-            // Verify chunk completeness? 
-            // If mergeSize=5 but we only have 3 chapters left at the very end -> Process them as one chunk.
+            // CHECK STATUS: If user paused or job failed externally, STOP.
+            const currentJob = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
+            if (!currentJob || currentJob.status === 'paused' || currentJob.status === 'failed') {
+                console.log(`Job ${jobId} is ${currentJob?.status}. Stopping batch.`);
+                break;
+            }
 
             const startChap = chunk[0].chapterNumber;
             const endChap = chunk[chunk.length - 1].chapterNumber;
             const chunkTitle = chunk.length === 1
                 ? `Chương ${startChap}`
                 : `Chương ${startChap} - ${endChap}`;
+
+            // Update lastProcessedAt heartbeat
+            await db.update(crawlJobs)
+                .set({ lastProcessedAt: new Date() })
+                .where(eq(crawlJobs.id, jobId));
 
             try {
                 console.log(`📖 Processing chunk ${chunkTitle}...`);
