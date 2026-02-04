@@ -167,28 +167,46 @@ export const summarizeChapter = async (
     }
 
     try {
-        const prompt = `Bạn là một tiểu thuyết gia và biên tập viên tài năng. Nhiệm vụ của bạn là LÀM MỚI (REWRITE) nội dung văn bản gốc bên dưới (được gộp từ ${title}) để tạo ra một bản tóm tắt chương hấp dẫn.
+        const prompt = `Bạn là một tiểu thuyết gia và biên tập viên tài năng. Nhiệm vụ của bạn là thực hiện 3 yêu cầu xử lý văn bản chuyên sâu cho nội dung bên dưới (được gộp từ ${title}).
 
 ---
-🛑 **QUY TẮC BẤT KHẢ XÂM PHẠM**:
-1. **KHÔNG ĐƯỢC COPY** nguyên văn bản gốc. Phải viết lại 100% bằng giọng văn kể chuyện (Storytelling) lôi cuốn, dồn dập.
-2. **CÔ ĐỌNG**: Lược bỏ hội thoại rườm rà, tập trung vào hành động cốt lõi.
-3. **ĐỊNH DẠNG**: Trả về 3 phần riêng biệt, ngăn cách nhau bằng dấu "|||".
+🛑 **QUY TẮC CHUNG "BẤT KHẢ XÂM PHẠM"**:
+1. **KHÔNG ĐƯỢC COPY** nguyên văn bản gốc.
+2. **SÁNG TẠO**: Phải viết lại bằng giọng văn hoàn toàn mới, sắc sảo và lôi cuốn hơn.
+3. **ĐỊNH DẠNG**: Trả về đúng 3 phần, ngăn cách bởi dấu "|||".
 
 ---
 📝 **Nội Dung Gốc**:
 ${content.substring(0, 100000)}
 
 ---
-⚠️ **YÊU CẦU ĐẦU RA** (Trả về chính xác theo định dạng bên dưới, không thêm lời dẫn):
+⚠️ **YÊU CẦU ĐẦU RA CHI TIẾT** (Phải tuân thủ tuyệt đối từng mục):
 
-[TÊN CHƯƠNG (Ngắn gọn 5-8 từ, không có số thứ tự)]
-|||
-[TÓM TẮT NGẮN (3-5 câu cảm nhận/phân tích súc tích)]
-|||
-[NỘI DUNG VIẾT LẠI (Chi tiết, hấp dẫn, tập trung hành động)]
+**PHẦN 1: TÊN CHƯƠNG MỚI**
+- Tiêu chí: Ngắn gọn, súc tích, gợi mở sự tò mò (Tối đa 5-8 từ).
+- 🚫 Cấm: Không được dùng số thứ tự (1, 2, 3...) hoặc từ "Chương".
+- Ví dụ: "Định Mệnh Giao Thoa", "Cơn Thịnh Nộ Của Rồng".
 
-👇 **BẮT ĐẦU**:`;
+|||
+
+**PHẦN 2: TÓM TẮT NGẮN (SHORT SUMMARY)**
+- Góc độ: **PHÂN TÍCH & CẢM NHẬN** (Review) chứ không chỉ kể lại.
+- Nội dung: Tập trung vào tâm lý nhân vật, ý nghĩa sự kiện và nghệ thuật kể chuyện.
+- Độ dài: 3-5 câu.
+- Mở đầu gợi ý: "Chương truyện khắc họa...", "Bi kịch bắt đầu khi...", "Tác giả khéo léo..." (Không bắt buộc, nhưng cấm mở đầu kiểu "Chương này nói về...").
+
+|||
+
+**PHẦN 3: NỘI DUNG VIẾT LẠI (REWRITE CONTENT)**
+- **MỤC TIÊU**: Biến chương truyện thành một bài **REVIEW KỂ CHUYỆN** (Storytelling Review).
+- **ĐỘ DÀI**: CÔ ĐỌNG, chỉ giữ lại diễn biến cốt lõi (khoảng 40-50% dung lượng gốc). Cắt bỏ hội thoại lôi thôi.
+- **PHONG CÁCH**: Nhịp điệu NHANH, dồn dập. Dùng từ ngữ gợi hình mạnh.
+- **CẤU TRÚC**:
+   + **Mở đầu bắt buộc**: *"Đây là bản tóm tắt và cảm nhận nội dung, không thay thế tác phẩm gốc."*
+   + **Thân bài**: Kể lại các sự kiện chính bằng giọng văn của một người đang kể chuyện say sưa.
+   + **Kết thúc**: Dừng lại ĐỘT NGỘT ngay tại cao trào (Cliffhanger). 🚫 KHÔNG viết đoạn kết luận/nhận xét cuối bài.
+
+👇 **XỬ LÝ VÀ TRẢ VỀ KẾT QUẢ NGAY BÊN DƯỚI**:`;
 
         console.log("👉 [AI-Service] Generating Pipe-Delimited Output...");
         // Log Input for verification
