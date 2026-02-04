@@ -295,13 +295,13 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
             <div className="flex gap-2 flex-wrap items-center bg-gray-50 p-3 rounded-lg border">
                 <div className="flex gap-2 mr-auto">
                     <Button
-                        onClick={() => processBatch(job.batchSize || 5)}
+                        onClick={() => processBatch(1)}
                         disabled={processing || job.status === 'processing' || job.status === 'completed'}
                         size="sm"
                         className="bg-indigo-600 hover:bg-indigo-700"
                     >
                         {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
-                        Chạy Ngay ({job.batchSize || 5} Chương)
+                        Chạy Ngay (1 Batch - Debug)
                     </Button>
 
                     {job.status === 'processing' ? (
