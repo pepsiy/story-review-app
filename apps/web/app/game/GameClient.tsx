@@ -69,8 +69,6 @@ type GameState = {
     itemsDef?: any;
     worldEvents?: string[]; // Phase 4
 };
-worldEvents ?: string[]; // Phase 4
-};
 
 type GameLog = {
     id: number;
@@ -928,7 +926,8 @@ export default function GameClient() {
                                                 <FlaskConical className="w-4 h-4 mr-1" /> Luyện Đan
                                             </Button>
                                         </div>
-                                    ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     )}
