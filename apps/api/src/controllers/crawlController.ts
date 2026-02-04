@@ -313,28 +313,37 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                 let shortSummary = "";
                 let fullContent = aiResponseText;
 
-                // Try parse JSON with robust fallback
-                try {
-                    // 1. naive remove markdown
-                    let cleanText = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+                // Try parse Custom Tags first (More Robust)
+                const tagTitleMatch = aiResponseText.match(/<d_title>([\s\S]*?)<\/d_title>/i);
+                const tagSummaryMatch = aiResponseText.match(/<d_summary>([\s\S]*?)<\/d_summary>/i);
+                const tagContentMatch = aiResponseText.match(/<d_content>([\s\S]*?)<\/d_content>/i);
 
-                    // 2. find outer braces
-                    const jsonStart = cleanText.indexOf('{');
-                    const jsonEnd = cleanText.lastIndexOf('}');
+                if (tagTitleMatch || tagSummaryMatch || tagContentMatch) {
+                    if (tagTitleMatch) title = tagTitleMatch[1].trim();
+                    if (tagSummaryMatch) shortSummary = tagSummaryMatch[1].trim();
+                    if (tagContentMatch) fullContent = tagContentMatch[1].trim();
+                } else {
+                    // Fallback to JSON parsing logic
+                    try {
+                        // 1. naive remove markdown
+                        let cleanText = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').trim();
 
-                    if (jsonStart !== -1 && jsonEnd !== -1) {
-                        cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
-                        const data = JSON.parse(cleanText);
-                        if (data.title) title = data.title;
-                        if (data.short_summary) shortSummary = data.short_summary;
-                        if (data.content) fullContent = data.content;
-                    } else {
-                        throw new Error("No JSON braces found");
+                        // 2. find outer braces
+                        const jsonStart = cleanText.indexOf('{');
+                        const jsonEnd = cleanText.lastIndexOf('}');
+
+                        if (jsonStart !== -1 && jsonEnd !== -1) {
+                            cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
+                            const data = JSON.parse(cleanText);
+                            if (data.title) title = data.title;
+                            if (data.short_summary) shortSummary = data.short_summary;
+                            if (data.content) fullContent = data.content;
+                        }
+                    } catch (e) {
+                        console.warn(`Could not parse JSON from AI response for chunk ${chunkTitle}. Using raw text.`);
+                        // Fallback: Strip fences if possible so it looks cleaner
+                        shortSummary = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').substring(0, 300) + "...";
                     }
-                } catch (e) {
-                    console.warn(`Could not parse JSON from AI response for chunk ${chunkTitle}. Using raw text.`);
-                    // Fallback: Strip fences if possible so it looks cleaner
-                    shortSummary = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').substring(0, 300) + "...";
                 }
 
                 // Fallback for short summary if empty
