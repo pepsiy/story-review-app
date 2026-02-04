@@ -64,7 +64,7 @@ export default async function ChapterPage({ params }: { params: Promise<{ slug: 
             id: true,
             chapterNumber: true,
             title: true,
-            originalText: true, // AI-generated review content (public)
+            aiText: true, // AI-generated review content (public)
             summary: true,
             youtubeId: true, // Video ID
             sourceChapterRange: true,
@@ -180,8 +180,8 @@ export default async function ChapterPage({ params }: { params: Promise<{ slug: 
 
             {/* Content */}
             <div className="chapter-content prose prose-lg max-w-none bg-white p-8 md:p-12 rounded-xl shadow-sm border border-slate-100 text-slate-900 text-[17px] leading-relaxed font-sans">
-                {chapter.originalText ? (
-                    <div dangerouslySetInnerHTML={{ __html: chapter.originalText.replace(/\n/g, '<br/>') }} />
+                {chapter.aiText ? (
+                    <div dangerouslySetInnerHTML={{ __html: chapter.aiText.replace(/\n/g, '<br/>') }} />
                 ) : (
                     <p className="text-center text-slate-400 italic">Nội dung tóm tắt đang được AI cập nhật...</p>
                 )}
