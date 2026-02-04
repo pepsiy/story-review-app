@@ -104,6 +104,30 @@ export class CrawlService {
     /**
      * Crawl nội dung của 1 chapter
      */
+    /**
+     * Deep clean raw text - matches Manual Mode cleaning logic
+     */
+    private cleanRawText(text: string): string {
+        return text
+            // Remove HTML tags (belt-and-suspenders with .text())
+            .replace(/<[^>]*>/g, '')
+            // Remove extra whitespace
+            .replace(/\s+/g, ' ')
+            // Remove common ad markers
+            .replace(/ads-\w+/gi, '')
+            // Remove HTML entities
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            // Trim
+            .trim();
+    }
+
+    /**
+     * Crawl nội dung của 1 chapter
+     */
     async crawlChapterContent(chapterUrl: string): Promise<string> {
         try {
             const response = await axios.get(chapterUrl, {
@@ -123,6 +147,9 @@ export class CrawlService {
             if (!content) {
                 throw new Error('No content found in chapter');
             }
+
+            // Apply deep cleaning (matches Manual Mode)
+            content = this.cleanRawText(content);
 
             return content;
         } catch (error: any) {
