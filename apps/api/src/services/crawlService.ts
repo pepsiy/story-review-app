@@ -113,7 +113,7 @@ export class CrawlService {
             const $ = cheerio.load(response.data);
 
             // Truyenfull.vision: content trong #chapter-c
-            let content = $('#chapter-c').text().trim();
+            let content = $('#chapter-c').text().replace(/\s+/g, ' ').trim();
 
             if (!content) {
                 // Fallback: thử selector khác

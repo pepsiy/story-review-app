@@ -139,6 +139,12 @@ export const summarizeChapter = async (
     // Rate limiting
     await rateLimiter.enforceRateLimit();
 
+    console.log(`[AI-Service] Summarizing content length: ${content.length} chars (Limit: 100k)`);
+    // Warn if content is too short
+    if (content.length < 500) {
+        console.warn(`[AI-Service] Content too short (${content.length}), AI might hallucinate.`);
+    }
+
     const prompt = `Bạn là một tiểu thuyết gia và biên tập viên tài năng. Nhiệm vụ của bạn là LÀM MỚI (REWRITE) nội dung văn bản gốc bên dưới (được gộp từ ${title}) thành một tác phẩm mới hấp dẫn hơn.
 
 ---
