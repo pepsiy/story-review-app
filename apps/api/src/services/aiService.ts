@@ -54,8 +54,16 @@ export const generateText = async (prompt: string): Promise<string> => {
             const genAI = new GoogleGenerativeAI(key);
 
             // User requested "Gemini 2.5 Flash"
+            // User requested "Gemini 2.5 Flash"
             const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-            const model = genAI.getGenerativeModel({ model: modelName });
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                generationConfig: {
+                    temperature: 0.9, // Creative High to ensuring rewriting
+                    topP: 0.95,
+                    topK: 40,
+                }
+            });
 
             // Set timeout to 180s (3 minutes) for large context
             const result = await withTimeout(model.generateContent(prompt), 180000);
@@ -155,7 +163,11 @@ export const summarizeChapter = async (
 4. KHÔNG dùng Markdown Code Block (\`\`\`xml). Trả về text thuần.
 
 ---
-⚠️ **CẤU TRÚC TRẢ VỀ BẮT BUỘC (XML FORMAT)**:
+📝 **Nội Dung Gốc Cần Xử Lý**:
+${content.substring(0, 100000)}
+
+---
+⚠️ **YÊU CẦU ĐẦU RA (XML FORMAT)**:
 Hãy trả về kết quả chính xác theo định dạng các thẻ sau:
 
 <d_title>
@@ -172,12 +184,6 @@ Mở đầu bằng: "Đây là bản tóm tắt và cảm nhận nội dung..."
 Văn phong dồn dập, tập trung vào hành động và sự kiện chính.
 Kết thúc đột ngột tại cao trào.
 </d_content>
-
----
-Đầu vào:
-Nguồn: ${title}
-Nội dung gốc:
-${content.substring(0, 100000)}
 
 ---
 👇 **BẮT ĐẦU VIẾT NGAY BÊN DƯỚI (Dùng đúng thẻ <d_title>, ...)**:`;
