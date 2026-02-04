@@ -322,8 +322,8 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                 // Initialize variables
                 let title = chunkTitle;
                 title = chunkTitle;
-                shortSummary = "";
-                fullContent = "";
+                let shortSummary = "";
+                let fullContent = "";
                 let gameEvents = [];
 
                 if (parts.length >= 4) {
