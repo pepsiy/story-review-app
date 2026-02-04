@@ -304,7 +304,7 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                     .map(c => `### Chương ${c.chapterNumber}: ${c.title || ''}\n\n${c.content}`)
                     .join('\n\n---\n\n');
 
-                // 4. Summarize Combined Content (Returns JSON String)
+                // 4. Summarize Combined Content (Returns Pipe-Delimited Text)
                 const aiResponseText = await summarizeChapter(startChap, chunkTitle, combinedContent);
 
                 const newChapterNumber = Math.floor((startChap - 1) / mergeSize) + 1;
@@ -318,37 +318,24 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                 let shortSummary = "";
                 let fullContent = aiResponseText;
 
-                // Try parse Custom Tags first (More Robust)
-                const tagTitleMatch = aiResponseText.match(/<d_title>([\s\S]*?)<\/d_title>/i);
-                const tagSummaryMatch = aiResponseText.match(/<d_summary>([\s\S]*?)<\/d_summary>/i);
-                const tagContentMatch = aiResponseText.match(/<d_content>([\s\S]*?)<\/d_content>/i);
-
-                if (tagTitleMatch || tagSummaryMatch || tagContentMatch) {
-                    if (tagTitleMatch) title = tagTitleMatch[1].trim();
-                    if (tagSummaryMatch) shortSummary = tagSummaryMatch[1].trim();
-                    if (tagContentMatch) fullContent = tagContentMatch[1].trim();
+                // --- NEW PARSING LOGIC (PIPE DELIMITER) ---
+                const parts = aiResponseText.split("|||");
+                if (parts.length >= 3) {
+                    // Part 1: Title (Remove [] if present)
+                    title = parts[0].trim().replace(/^\[+|\]+$/g, '').trim();
+                    // Part 2: Short Summary
+                    shortSummary = parts[1].trim().replace(/^\[+|\]+$/g, '').trim();
+                    // Part 3: Content (Rest of text)
+                    // If AI put more pipes, join them back or just take the rest?
+                    // Prompt asks for 3 parts. But to be safe, join rest.
+                    fullContent = parts.slice(2).join("|||").trim().replace(/^\[+|\]+$/g, '').trim();
                 } else {
-                    // Fallback to JSON parsing logic
-                    try {
-                        // 1. naive remove markdown
-                        let cleanText = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-                        // 2. find outer braces
-                        const jsonStart = cleanText.indexOf('{');
-                        const jsonEnd = cleanText.lastIndexOf('}');
-
-                        if (jsonStart !== -1 && jsonEnd !== -1) {
-                            cleanText = cleanText.substring(jsonStart, jsonEnd + 1);
-                            const data = JSON.parse(cleanText);
-                            if (data.title) title = data.title;
-                            if (data.short_summary) shortSummary = data.short_summary;
-                            if (data.content) fullContent = data.content;
-                        }
-                    } catch (e) {
-                        console.warn(`Could not parse JSON from AI response for chunk ${chunkTitle}. Using raw text.`);
-                        // Fallback: Strip fences if possible so it looks cleaner
-                        shortSummary = aiResponseText.replace(/```json/gi, '').replace(/```/g, '').substring(0, 300) + "...";
-                    }
+                    console.warn(`[Crawl Warning] Could not split based on '|||'. Using raw text fallback.`);
+                    // Fallback: If split failed, maybe it's just content?
+                    // Try old XML tags as backup? No, prompt changed.
+                    // Just look for common delimiters or assume failure.
+                    // Let's guess:
+                    shortSummary = aiResponseText.substring(0, 300) + "...";
                 }
 
                 // Fallback for short summary if empty
