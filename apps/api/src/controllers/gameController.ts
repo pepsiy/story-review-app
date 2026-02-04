@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { db } from "../../../../packages/db/src";
-import { users, farmPlots, inventory, gameItems } from "../../../../packages/db/src";
-import { ITEM_TYPES, CULTIVATION_LEVELS } from "../data/gameData";
+import { users, farmPlots, inventory, gameItems, gameLogs } from "../../../../packages/db/src";
+import { ITEM_TYPES, CULTIVATION_LEVELS, PLOT_UNLOCK_COSTS, WATER_CONFIG } from "../data/gameData";
 
 // --- Helpers ---
 const getUserGameState = async (userId: string) => {
@@ -107,11 +107,17 @@ export const harvestPlant = async (req: Request, res: Response) => {
         const seedDef = await db.query.gameItems.findFirst({ where: eq(gameItems.id, plot.seedId) });
         if (!seedDef) return res.status(400).json({ error: "Loại hạt giống không tồn tại" });
 
-        const now = new Date();
-        const growTimeMs = (seedDef.growTime || 60) * 1000;
-        const elapsed = now.getTime() - new Date(plot.plantedAt).getTime();
+        const now = Date.now();
+        const baseGrowTimeMs = (seedDef.growTime || 60) * 1000;
 
-        if (elapsed < growTimeMs) {
+        // Calculate reduction from watering
+        const waterCount = plot.waterCount || 0;
+        const reductionMs = baseGrowTimeMs * waterCount * WATER_CONFIG.REDUCTION_PERCENT;
+        const finalGrowTimeMs = Math.max(0, baseGrowTimeMs - reductionMs);
+
+        const elapsed = now - new Date(plot.plantedAt).getTime();
+
+        if (elapsed < finalGrowTimeMs) {
             return res.status(400).json({ error: "Cây chưa lớn" });
         }
 
@@ -137,7 +143,7 @@ export const harvestPlant = async (req: Request, res: Response) => {
         await db.transaction(async (tx) => {
             // Clear plot
             await tx.update(farmPlots)
-                .set({ seedId: null, plantedAt: null })
+                .set({ seedId: null, plantedAt: null, waterCount: 0, lastWateredAt: null })
                 .where(eq(farmPlots.id, plotId));
 
             // Add product
@@ -390,6 +396,149 @@ export const useItem = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error("Use Item Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// --- New Features Phase 1 ---
+
+const getGameLogs = async (userId: string) => {
+    // Get logs where user is actor OR target
+    return await db.query.gameLogs.findMany({
+        where: or(eq(gameLogs.userId, userId), eq(gameLogs.targetUserId, userId)),
+        orderBy: (logs, { desc }) => [desc(logs.createdAt)],
+        limit: 20
+    });
+};
+
+export const getLogs = async (req: Request, res: Response) => {
+    try {
+        const { userId } = req.query as { userId: string };
+        if (!userId) return res.status(400).json({ error: "User ID required" });
+
+        const logs = await getGameLogs(userId);
+        res.json(logs);
+    } catch (error: any) {
+        console.error("Get Logs Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const unlockSlot = async (req: Request, res: Response) => {
+    try {
+        const { userId, plotIndex } = req.body;
+
+        // Validation
+        if (plotIndex < 3 || plotIndex > 8) {
+            return res.status(400).json({ error: "Chỉ có thể mở khóa ô đất từ 4 đến 9 (index 3-8)" });
+        }
+
+        const cost = PLOT_UNLOCK_COSTS[plotIndex];
+        if (!cost) return res.status(400).json({ error: "Không tìm thấy thông tin giá mở khóa" });
+
+        const plot = await db.query.farmPlots.findFirst({
+            where: and(eq(farmPlots.userId, userId), eq(farmPlots.plotIndex, plotIndex))
+        });
+
+        if (plot && plot.isUnlocked) {
+            return res.status(400).json({ error: "Ô đất này đã được mở khóa" });
+        }
+
+        const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+        if (!user || (user.gold || 0) < cost) {
+            return res.status(400).json({ error: `Bạn cần ${cost} Vàng để mở khóa` });
+        }
+
+        await db.transaction(async (tx) => {
+            // Deduct Gold
+            await tx.update(users)
+                .set({ gold: (user.gold || 0) - cost })
+                .where(eq(users.id, userId));
+
+            // Unlock Plot
+            if (plot) {
+                await tx.update(farmPlots)
+                    .set({ isUnlocked: true })
+                    .where(eq(farmPlots.id, plot.id));
+            } else {
+                // If plot row doesn't exist yet (lazy init edge case), insert it
+                await tx.insert(farmPlots).values({
+                    userId,
+                    plotIndex,
+                    isUnlocked: true
+                });
+            }
+
+            // Log
+            await tx.insert(gameLogs).values({
+                userId,
+                action: 'UNLOCK_PLOT',
+                description: `Mở khóa ô đất số ${plotIndex + 1} (-${cost} Vàng)`,
+                createdAt: new Date()
+            });
+        });
+
+        res.json({ message: `Mở khóa thành công ô đất số ${plotIndex + 1}!` });
+    } catch (error: any) {
+        console.error("Unlock Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+export const waterPlant = async (req: Request, res: Response) => {
+    try {
+        const { userId, targetPlotId } = req.body;
+
+        const plot = await db.query.farmPlots.findFirst({
+            where: eq(farmPlots.id, targetPlotId)
+        });
+
+        if (!plot || !plot.seedId || !plot.plantedAt) {
+            return res.status(400).json({ error: "Ô đất trống hoặc không tồn tại" });
+        }
+
+        if ((plot.waterCount || 0) >= WATER_CONFIG.MAX_WATER_PER_CROP) {
+            return res.status(400).json({ error: "Cây này đã đủ nước rồi" });
+        }
+
+        // Cooldown check (Simple: 1 min global cooldown for now per plot? Or just strictly count?)
+        // Let's implement cooldown: 5 minutes per water action on same plot
+        if (plot.lastWateredAt) {
+            const diff = Date.now() - new Date(plot.lastWateredAt).getTime();
+            if (diff < 5 * 60 * 1000) {
+                return res.status(400).json({ error: "Cây vừa được tưới, hãy đợi chút!" });
+            }
+        }
+
+        // Determine relationship
+        const isOwner = plot.userId === userId;
+
+        await db.transaction(async (tx) => {
+            // Update Plot
+            await tx.update(farmPlots)
+                .set({
+                    waterCount: (plot.waterCount || 0) + 1,
+                    lastWateredAt: new Date()
+                })
+                .where(eq(farmPlots.id, targetPlotId));
+
+            // Log if social
+            if (!isOwner) {
+                const actor = await tx.query.users.findFirst({ where: eq(users.id, userId) });
+                await tx.insert(gameLogs).values({
+                    userId: userId, // Actor
+                    targetUserId: plot.userId, // Owner
+                    action: 'WATER',
+                    description: `${actor?.name || 'Ai đó'} đã tưới nước cho cây của bạn!`,
+                    createdAt: new Date()
+                });
+            }
+        });
+
+        res.json({ message: "Tưới nước thành công! Cây sẽ lớn nhanh hơn." });
+
+    } catch (error: any) {
+        console.error("Water Error:", error);
         res.status(500).json({ error: error.message });
     }
 };

@@ -224,9 +224,29 @@ export const farmPlots = pgTable('farm_plots', {
     isUnlocked: boolean('is_unlocked').default(false),
     seedId: text('seed_id'), // null = empty
     plantedAt: timestamp('planted_at'), // null = not planted
+
+    // New fields for Watering Feature
+    waterCount: integer('water_count').default(0),
+    lastWateredAt: timestamp('last_watered_at'),
 }, (table) => {
     return {
         userPlotIdx: index('user_plot_idx').on(table.userId, table.plotIndex),
+    };
+});
+
+// Bảng Nhật ký Game (Social Interactions)
+export const gameLogs = pgTable('game_logs', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(), // Người thực hiện
+    targetUserId: text('target_user_id').references(() => users.id, { onDelete: 'cascade' }), // Người bị tác động (nếu có)
+    action: text('action').notNull(), // 'WATER', 'STEAL', 'UNLOCK_PLOT', 'LEVEL_UP'
+    description: text('description'), // "A đã tưới nước cho B", "Mở khóa ô đất số 4"
+    metadata: text('metadata'), // JSON string for details
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        userActionIdx: index('game_log_user_idx').on(table.userId),
+        targetActionIdx: index('game_log_target_idx').on(table.targetUserId),
     };
 });
 

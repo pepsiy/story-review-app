@@ -28,6 +28,21 @@ export const RECIPES: Record<string, { ingredients: { itemId: string, quantity: 
     }
 };
 
+// Config costs for unlocking slots (Index 0-2 are free)
+export const PLOT_UNLOCK_COSTS: Record<number, number> = {
+    3: 1000,
+    4: 5000,
+    5: 20000,
+    6: 50000,
+    7: 100000,
+    8: 500000
+};
+
+export const WATER_CONFIG = {
+    REDUCTION_PERCENT: 0.1, // 10% reduction per water
+    MAX_WATER_PER_CROP: 3,
+};
+
 export const CULTIVATION_LEVELS = [
     { name: 'Phàm Nhân', exp: 0 },
     { name: 'Luyện Khí', exp: 100 },
