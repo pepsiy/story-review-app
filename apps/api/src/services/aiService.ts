@@ -17,7 +17,7 @@ interface KeyUsage {
 class KeyManager {
     private keys: Map<string, KeyUsage> = new Map();
     private readonly RATE_LIMIT_RPM = 12; // Free Tier is 15. Set 12 to be safe.
-    private readonly RATE_LIMIT_RPD = 1400; // Free Tier is 1500. Set 1400 safe.
+    private readonly RATE_LIMIT_RPD = 1400; // Free Tier is 1500. Set 1450 safe.
     private readonly WINDOW_SIZE_MS = 60000; // 1 minute
     private initialized = false;
 
@@ -43,7 +43,7 @@ class KeyManager {
             console.warn("⚠️ Failed to fetch keys from DB:", e);
         }
 
-        // 2. Try Env (Append, don't replace if DB has keys? Actually merge unique)
+        // 2. Try Env
         const envKeys = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "")
             .split(",")
             .map(k => k.trim())
@@ -54,7 +54,7 @@ class KeyManager {
 
         if (allKeys.length === 0) {
             console.error("❌ No GEMINI_API_KEYS found!");
-            throw new Error("No GEMINI_API_KEYS found.");
+            // Instead of throw, we allow init but getAvailableKey will fail
         }
 
         // Initialize state for new keys
@@ -72,56 +72,138 @@ class KeyManager {
             }
         });
 
-        if (dbKey && dbKey.value) {
-            console.log("🔑 Using GEMINI_API_KEY from Database");
-            return dbKey.value.split(",").map(k => k.trim()).filter(k => k.length > 0);
-        }
-    } catch(e) {
-        console.warn("⚠️ Failed to fetch key from DB, falling back to Env:", e);
+        console.log(`🔐 KeyManager Initialized with ${this.keys.size} keys.`);
+        this.initialized = true;
     }
 
-    // Fallback to Env
-    const keys = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
-    return keys.split(",").map(k => k.trim()).filter(k => k.length > 0);
-};
+    /**
+     * Get the best available key, or wait if necessary.
+     */
+    async getAvailableKey(): Promise<string> {
+        await this.initialize();
+        if (this.keys.size === 0) {
+            throw new Error("No GEMINI_API_KEYS configured.");
+        }
 
-let currentKeyIndex = 0;
+        while (true) {
+            const now = Date.now();
+            let bestKey: string | null = null;
+            let minWaitTime = Infinity;
+
+            // Check each key state
+            for (const [keyStr, usage] of this.keys.entries()) {
+                if (usage.isDead) continue;
+
+                // Check Cooldown
+                if (usage.cooldownUntil > now) {
+                    minWaitTime = Math.min(minWaitTime, usage.cooldownUntil - now);
+                    continue;
+                }
+
+                // Check Daily Limit (Reset if needed)
+                if (now - usage.lastDailyReset > 86400000) { // 24h
+                    usage.totalRequestsToday = 0;
+                    usage.lastDailyReset = now;
+                }
+                if (usage.totalRequestsToday >= this.RATE_LIMIT_RPD) {
+                    // Key exhausted for day - wait for next day? 
+                    // Too long to wait, just skip.
+                    const cooldown = 86400000 - (now - usage.lastDailyReset);
+                    minWaitTime = Math.min(minWaitTime, cooldown);
+                    continue;
+                }
+
+                // Check RPM Window (Reset if needed)
+                if (now - usage.windowStartTime > this.WINDOW_SIZE_MS) {
+                    usage.requestsInCurrentWindow = 0;
+                    usage.windowStartTime = now;
+                }
+
+                if (usage.requestsInCurrentWindow < this.RATE_LIMIT_RPM) {
+                    // Valid key found!
+                    bestKey = keyStr;
+                    break; // Found one, exit loop
+                } else {
+                    // Key busy, calculate wait time for next window
+                    const wait = this.WINDOW_SIZE_MS - (now - usage.windowStartTime);
+                    minWaitTime = Math.min(minWaitTime, wait);
+                }
+            }
+
+            if (bestKey) {
+                // Record provisional usage
+                const usage = this.keys.get(bestKey)!;
+                usage.requestsInCurrentWindow++;
+                usage.totalRequestsToday++;
+                return bestKey;
+            }
+
+            // No key available
+            if (minWaitTime === Infinity) {
+                console.warn("⚠️ All API Keys seem dead or exhausted daily limit.");
+                minWaitTime = 60000; // Default 1m wait
+            }
+
+            // Cap minWaitTime to avoid infinite stuck
+            if (minWaitTime < 100) minWaitTime = 1000;
+
+            console.log(`⏳ All ${this.keys.size} keys busy/cooling. Waiting ${(minWaitTime / 1000).toFixed(1)}s...`);
+            await new Promise(r => setTimeout(r, minWaitTime + 100));
+        }
+    }
+
+    /**
+     * Report usage result to optimize state
+     */
+    reportResult(key: string, success: boolean, statusCode?: number) {
+        const usage = this.keys.get(key);
+        if (!usage) return;
+
+        if (!success) {
+            if (statusCode === 429) {
+                console.warn(`⚠️ Key ${key.slice(0, 4)}... hit Rate Limit (429). Cooling for 60s.`);
+                usage.cooldownUntil = Date.now() + 60000;
+            }
+            if (statusCode === 400 || statusCode === 403) {
+                // Potentially mark dead, but safety first - just cool
+                usage.cooldownUntil = Date.now() + 60000;
+            }
+        }
+    }
+
+    getStats() {
+        return Array.from(this.keys.values()).map(k => ({
+            key: k.key.slice(0, 5) + "...",
+            rpm: `${k.requestsInCurrentWindow}/${this.RATE_LIMIT_RPM}`,
+            today: `${k.totalRequestsToday}/${this.RATE_LIMIT_RPD}`,
+            status: k.isDead ? "DEAD" : (k.cooldownUntil > Date.now() ? `COOLING (${Math.ceil((k.cooldownUntil - Date.now()) / 1000)}s)` : "READY")
+        }));
+    }
+}
+
+export const keyManager = new KeyManager();
+
+// --- AI SERVICE IMPL ---
 
 export const generateText = async (prompt: string): Promise<string> => {
-    const keys = await getApiKeys();
+    let attempts = 0;
+    const MAX_ATTEMPTS = 5; // Try up to 5 times (switching keys each time potentially)
 
-    if (keys.length === 0) {
-        throw new Error("No GEMINI_API_KEYS found in Database or Environment variables.");
-    }
-
-    const maxRetries = keys.length;
-    let attempt = 0;
-
-    // Reset index if out of bounds (keys changed)
-    if (currentKeyIndex >= keys.length) currentKeyIndex = 0;
-
-    // Helper: Timeout wrapper
-    const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
-        return Promise.race([
-            promise,
-            new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms))
-        ]);
-    };
-
-    while (attempt < maxRetries) {
+    while (attempts < MAX_ATTEMPTS) {
+        attempts++;
+        let key = "";
         try {
-            const key = keys[currentKeyIndex];
-            console.log(`🔑 Using Gemini Key [${currentKeyIndex + 1}/${keys.length}]: ${key.slice(0, 4)}...`);
+            key = await keyManager.getAvailableKey();
+            console.log(`🔑 Using Key: ${key.slice(0, 4)}... (Attempt ${attempts})`);
 
             const genAI = new GoogleGenerativeAI(key);
 
-            // User requested "Gemini 2.5 Flash"
-            // User requested "Gemini 2.5 Flash"
+            // Force Model 2.5 Flash
             const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 generationConfig: {
-                    temperature: 0.9, // Creative High to ensuring rewriting
+                    temperature: 0.9,
                     topP: 0.95,
                     topK: 40,
                 }
@@ -129,101 +211,70 @@ export const generateText = async (prompt: string): Promise<string> => {
 
             console.log("----------------------------------------------------------------");
             console.log("🚀 [AI DEBUG] Sending Prompt to", modelName);
-            console.log("📝 [AI DEBUG] Prompt Preview:", prompt.substring(0, 500) + "\n...\n" + prompt.slice(-500));
+            // Log full prompt for debug
+            // console.log("📝 [DEBUG] FULL PROMPT SENT:\n", prompt); 
+            // Commented out prompt log to avoid spamming 50k chars in console unless debugging
+            console.log("📝 [AI DEBUG] Prompt Preview:", prompt.substring(0, 200) + "..." + prompt.slice(-200));
             console.log("----------------------------------------------------------------");
 
-            // Set timeout to 180s (3 minutes) for large context
-            const result = await withTimeout(model.generateContent(prompt), 180000);
+            // Timeout wrapper (180s)
+            const resultPromise = model.generateContent(prompt);
+            const result = await Promise.race([
+                resultPromise,
+                new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout after 180s")), 180000))
+            ]) as any;
+
             const response = await result.response;
             const textResponse = response.text();
 
             console.log("----------------------------------------------------------------");
-            console.log("📥 [AI DEBUG] Received Response Length:", textResponse.length);
-            console.log("📄 [AI DEBUG] Response Preview:", textResponse.substring(0, 500) + "...");
+            console.log("📄 [AI DEBUG] RAW AI OUTPUT PREVIEW:\n", textResponse.substring(0, 200) + "...");
+            console.log(`✅ [AI-Service] Done. Length: ${textResponse.length}`);
             console.log("----------------------------------------------------------------");
 
+            // Report Success (Implicitly, counters already incremented)
+            keyManager.reportResult(key, true);
             return textResponse;
-        } catch (error: any) {
-            console.error(`❌ AI Generation Error (Attempt ${attempt + 1}/${maxRetries}):`, error.message);
 
-            // Check for quota/rate limit errors (429 usually) or Timeout
-            if (error.message?.includes("429") || error.status === 429 || error.message?.includes("quota") || error.message?.includes("Timeout")) {
-                console.warn("⚠️ Quota exceeded or Timeout. Switching key/Retrying...");
-                currentKeyIndex = (currentKeyIndex + 1) % keys.length; // Rotate
-                attempt++;
-            } else {
+        } catch (error: any) {
+            console.error(`❌ AI Error (Attempt ${attempts}):`, error.message);
+
+            let code = 500;
+            if (error.message?.includes("429")) code = 429;
+            else if (error.message?.includes("403")) code = 403;
+            else if (error.message?.includes("400")) code = 400;
+
+            if (key) keyManager.reportResult(key, false, code);
+
+            // If it's a safety block or content error (not quota), maybe we shouldn't retry?
+            // "Candidate was blocked due to safety" -> usually 400 or specific message.
+            // But we will retry with another key just in case it's random.
+
+            if (attempts >= MAX_ATTEMPTS) {
                 throw error;
             }
+            // Small pause
+            await new Promise(r => setTimeout(r, 1000));
         }
     }
-
-    throw new Error("All API keys exhausted or failed.");
+    throw new Error("Failed to generate text after max retries");
 };
 
-// ==================== AUTO-CRAWL SPECIFIC FUNCTIONS ====================
-
-class RateLimiter {
-    private lastRequestTime = 0;
-    private requestCount = 0;
-    private readonly RATE_LIMIT_RPM = 10; // Free tier safe limit
-    private readonly MIN_DELAY_MS = (60 / this.RATE_LIMIT_RPM) * 1000; // 6000ms
-
-    async enforceRateLimit() {
-        const now = Date.now();
-        const elapsedSinceLastRequest = now - this.lastRequestTime;
-
-        // Reset counter every minute
-        if (elapsedSinceLastRequest > 60000) {
-            this.requestCount = 0;
-        }
-
-        // If we've hit limit, wait
-        if (this.requestCount >= this.RATE_LIMIT_RPM) {
-            const waitTime = 60000 - elapsedSinceLastRequest;
-            console.log(`⏳ Rate limit reached. Waiting ${Math.ceil(waitTime / 1000)}s...`);
-            await this.delay(waitTime);
-            this.requestCount = 0;
-        }
-
-        // Ensure minimum delay between requests
-        if (elapsedSinceLastRequest < this.MIN_DELAY_MS) {
-            const waitTime = this.MIN_DELAY_MS - elapsedSinceLastRequest;
-            await this.delay(waitTime);
-        }
-
-        this.lastRequestTime = Date.now();
-        this.requestCount++;
-    }
-
-    private delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    getStats() {
-        return {
-            rpm: this.RATE_LIMIT_RPM,
-            requestCount: this.requestCount,
-            lastRequestTime: this.lastRequestTime
-        };
-    }
-}
-
-const rateLimiter = new RateLimiter();
-
 /**
- * Tóm tắt 1 chapter bằng AI (3-Step Pipeline - Matches Manual Mode)
+ * Tóm tắt 1 chapter bằng AI (Single Pipeline)
  */
 export const summarizeChapter = async (
     chapterNumber: number,
     title: string,
     content: string
 ): Promise<string> => {
-    // 1. Check Limits & Logs
-    await rateLimiter.enforceRateLimit();
-    console.log(`[AI-Service] Processing Single-Prompt Pipe-Delimited for: ${title}`);
-    console.log(`[AI-Service] Input Content Length: ${content.length}`);
-    console.log(`[AI-Service] Input Preview: ${content.substring(0, 200)}...`);
+    // Check Stats
+    const stats = keyManager.getStats();
+    console.log("[KeyManager Stats]", JSON.stringify(stats));
 
+    console.log(`[AI-Service] Processing Single-Prompt for: ${title}`);
+
+    // Warning if too short
     if (content.length < 500) {
         console.warn(`[AI-Service] Content too short (${content.length}), AI might hallucinate.`);
     }
@@ -280,16 +331,12 @@ ${content.substring(0, 100000)}
 👇 **TRẢ VỀ KẾT QUẢ NGAY BÊN DƯỚI (Chỉ nội dung, không kèm tiêu đề phần)**:`;
 
         console.log("👉 [AI-Service] Sending Mega-Prompt...");
-        // Log Input for verification - FULL PROMPT LOG as requested
+
+        // Log Full prompt again here as requested by user in last turn
         console.log("📝 [DEBUG] FULL PROMPT SENT:\n", prompt);
 
-        const result = await generateText(prompt);
-
-        // Log Output for verification
-        console.log("📄 [DEBUG] RAW AI OUTPUT:\n", result);
-        console.log(`✅ [AI-Service] Done. Length: ${result.length}`);
-
-        return result.trim();
+        // Use generic generateText which handles rotation
+        return await generateText(prompt);
 
     } catch (error: any) {
         console.error("❌ Error in AI Pipeline:", error);
@@ -300,4 +347,4 @@ ${content.substring(0, 100000)}
 /**
  * Get rate limit stats
  */
-export const getRateLimitStats = () => rateLimiter.getStats();
+export const getRateLimitStats = () => keyManager.getStats();
