@@ -2,19 +2,81 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { db, systemSettings } from "../../../../packages/db/src";
 import { eq } from "drizzle-orm";
 
-// Load keys from DB or Env
-const getApiKeys = async (): Promise<string[]> => {
-    try {
-        // Try DB first
-        const dbKey = await db.query.systemSettings.findFirst({
-            where: eq(systemSettings.key, "GEMINI_API_KEY")
+// --- SMART KEY MANAGER ---
+
+interface KeyUsage {
+    key: string;
+    requestsInCurrentWindow: number;
+    windowStartTime: number;
+    cooldownUntil: number; // Timestamp when key is ready again
+    totalRequestsToday: number;
+    lastDailyReset: number;
+    isDead: boolean; // If key is permanently invalid (400/403)
+}
+
+class KeyManager {
+    private keys: Map<string, KeyUsage> = new Map();
+    private readonly RATE_LIMIT_RPM = 12; // Free Tier is 15. Set 12 to be safe.
+    private readonly RATE_LIMIT_RPD = 1400; // Free Tier is 1500. Set 1400 safe.
+    private readonly WINDOW_SIZE_MS = 60000; // 1 minute
+    private initialized = false;
+
+    constructor() { }
+
+    /**
+     * Load keys from DB and Env, initializing the manager
+     */
+    async initialize() {
+        if (this.initialized && this.keys.size > 0) return;
+
+        let keyList: string[] = [];
+
+        // 1. Try DB
+        try {
+            const dbKey = await db.query.systemSettings.findFirst({
+                where: eq(systemSettings.key, "GEMINI_API_KEY")
+            });
+            if (dbKey && dbKey.value) {
+                keyList = dbKey.value.split(",").map(k => k.trim()).filter(k => k.length > 0);
+            }
+        } catch (e) {
+            console.warn("⚠️ Failed to fetch keys from DB:", e);
+        }
+
+        // 2. Try Env (Append, don't replace if DB has keys? Actually merge unique)
+        const envKeys = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "")
+            .split(",")
+            .map(k => k.trim())
+            .filter(k => k.length > 0);
+
+        // Merge unique
+        const allKeys = Array.from(new Set([...keyList, ...envKeys]));
+
+        if (allKeys.length === 0) {
+            console.error("❌ No GEMINI_API_KEYS found!");
+            throw new Error("No GEMINI_API_KEYS found.");
+        }
+
+        // Initialize state for new keys
+        allKeys.forEach(k => {
+            if (!this.keys.has(k)) {
+                this.keys.set(k, {
+                    key: k,
+                    requestsInCurrentWindow: 0,
+                    windowStartTime: Date.now(),
+                    cooldownUntil: 0,
+                    totalRequestsToday: 0,
+                    lastDailyReset: Date.now(),
+                    isDead: false
+                });
+            }
         });
 
         if (dbKey && dbKey.value) {
             console.log("🔑 Using GEMINI_API_KEY from Database");
             return dbKey.value.split(",").map(k => k.trim()).filter(k => k.length > 0);
         }
-    } catch (e) {
+    } catch(e) {
         console.warn("⚠️ Failed to fetch key from DB, falling back to Env:", e);
     }
 
