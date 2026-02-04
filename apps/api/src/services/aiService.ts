@@ -149,61 +149,108 @@ class RateLimiter {
 const rateLimiter = new RateLimiter();
 
 /**
- * Tóm tắt 1 chapter bằng AI (with rate limiting)
+ * Tóm tắt 1 chapter bằng AI (3-Step Pipeline - Matches Manual Mode)
  */
 export const summarizeChapter = async (
     chapterNumber: number,
     title: string,
     content: string
 ): Promise<string> => {
-    // Rate limiting
+    // 1. Check Limits & Logs
     await rateLimiter.enforceRateLimit();
+    console.log(`[AI-Service] Processing 3-Step Pipeline for: ${title}`);
+    console.log(`[AI-Service] Input Content Length: ${content.length}`);
+    console.log(`[AI-Service] Input Preview: ${content.substring(0, 200)}...`);
 
-    console.log(`[AI-Service] Summarizing content length: ${content.length} chars (Limit: 100k)`);
-    console.log(`[AI-Service] Input Content Preview: ${content.substring(0, 200)}...`);
+    if (content.length < 500) {
+        console.warn(`[AI-Service] Content too short (${content.length}), AI might hallucinate.`);
+    }
 
-    const prompt = `Bạn là một tiểu thuyết gia và biên tập viên tài năng. Nhiệm vụ của bạn là LÀM MỚI (REWRITE) nội dung văn bản gốc bên dưới (được gộp từ ${title}) thành một tác phẩm mới hấp dẫn hơn.
+    try {
+        // --- STEP 1: REWRITE CONTENT (The big one) ---
+        // EXACT PROMPT FROM page.tsx
+        const rewritePrompt = `Bạn là một tiểu thuyết gia. Hãy TÓM LƯỢC & VIẾT LẠI nội dung này thành một bài Review cuốn hút.
 
----
-🛑 **QUY TẮC BẤT KHẢ XÂM PHẠM (CRITICAL RULES)**:
-1. **KHÔNG ĐƯỢC COPY** nguyên văn bản gốc.
-2. **PHẢI VIẾT LẠI 100%** bằng giọng văn kể chuyện (Storytelling) mới lạ, hấp dẫn.
-3. **CÔ ĐỌNG NỘI DUNG**: Lược bỏ hoàn toàn các hội thoại rườm rà, chỉ giữ lại diễn biến cốt lõi.
-4. KHÔNG dùng Markdown Code Block (\`\`\`xml). Trả về text thuần.
+**⚠️ MỤC TIÊU QUAN TRỌNG:**
+- **ĐỘ DÀI:** Chỉ giữ lại khoảng **40-50%** dung lượng so với bản gốc. CÔ ĐỌNG, không lan man.
+- **BỎ QUA:** Các hội thoại rườm rà, chi tiết mô tả không cần thiết.
+- **TẬP TRUNG:** Chỉ kể lại các sự kiện chính (Key Events) và cao trào.
 
----
-📝 **Nội Dung Gốc Cần Xử Lý**:
+**⚠️ TUÂN THỦ PHÁP LÝ:**
+1. **KHÔNG COPY** nguyên văn bản gốc.
+2. Viết lại 100% bằng giọng văn mới.
+3. BẮT BUỘC mở đầu bằng: *"Đây là bài tóm tắt và cảm nhận nội dung, không thay thế tác phẩm gốc."*
+
+**PHONG CÁCH VIẾT:**
+- Nhịp điệu NHANH, lôi cuốn.
+- Dùng từ ngữ gợi hình để thay thế cho các đoạn tả dài dòng.
+- Kết thúc: Dừng lại ĐỘT NGỘT ngay tại hành động/câu thoại cao trào nhất.
+- 🚫 **CẤM TUYỆT ĐỐI**: Không viết đoạn kết luận/nhận xét cuối bài.
+
+Nội dung gốc:
 ${content.substring(0, 100000)}
 
----
-⚠️ **YÊU CẦU ĐẦU RA (XML FORMAT)**:
-Hãy trả về kết quả chính xác theo định dạng các thẻ sau:
+Bắt đầu viết (Ngắn gọn, súc tích):`;
 
+        console.log("👉 [Step 1/3] Generating Rewrite...");
+        const rewriteText = await generateText(rewritePrompt);
+        console.log(`✅ [Step 1/3] Rewrite Done. Length: ${rewriteText.length}`);
+
+        // --- STEP 2: GENERATE SHORT SUMMARY ---
+        // EXACT PROMPT FROM page.tsx
+        const summaryPrompt = `Hãy viết một đoạn TÓM TẮT NGẮN (Short Summary) dưới góc độ PHÂN TÍCH/CẢM NHẬN cho nội dung sau:
+
+${rewriteText.substring(0, 50000)}
+
+Yêu cầu:
+- Tập trung vào ý nghĩa, cảm xúc nhân vật, và nghệ thuật kể chuyện.
+- Bắt đầu bằng những câu như: "Chương truyện khắc họa...", "Bi kịch của nhân vật bắt đầu...", "Tác giả khéo léo lồng ghép..."
+- TUYỆT ĐỐI KHÔNG bắt đầu bằng: "Chương truyện giới thiệu...", "Chương này nói về..."
+- Độ dài: 3-5 câu.`;
+
+        console.log("👉 [Step 2/3] Generating Short Summary...");
+        const shortSummary = await generateText(summaryPrompt);
+        console.log(`✅ [Step 2/3] Summary Done.`);
+
+        // --- STEP 3: GENERATE TITLE ---
+        // EXACT PROMPT FROM page.tsx
+        const titlePrompt = `Dựa vào nội dung tóm tắt sau, hãy tạo một TÊN CHƯƠNG ngắn gọn, súc tích (tối đa 5-8 từ).
+
+Tóm tắt:
+${shortSummary}
+
+Yêu cầu:
+- Tên chương phải GỢI TỚI nội dung chính của chương
+- Ngắn gọn, dễ nhớ, hấp dẫn
+- KHÔNG dùng số thứ tự (VD: "Chương 1", "Phần 1")
+- KHÔNG dùng từ "Chương" trong tên
+- Ví dụ: "Hành Trình Bắt Đầu", "Thử Thách Đầu Tiên", "Định Mệnh Giao Thoa"
+
+Chỉ trả về TÊN CHƯƠNG, không giải thích:`;
+
+        console.log("👉 [Step 3/3] Generating Title...");
+        const generatedTitle = (await generateText(titlePrompt)).replace(/^["']|["']$/g, '').trim();
+        console.log(`✅ [Step 3/3] Title Done: ${generatedTitle}`);
+
+        // --- COMBINE RESULTS INTO COMPATIBLE XML FOR CONTROLLER ---
+        const finalOutput = `
 <d_title>
-Tên Chương Mới (Ngắn gọn 5-8 từ, không dùng số thứ tự)
+${generatedTitle}
 </d_title>
 
 <d_summary>
-Đoạn tóm tắt cảm nhận/phân tích sâu sắc (3-5 câu). Tập trung vào tâm lý nhân vật và nghệ thuật kể chuyện.
+${shortSummary}
 </d_summary>
 
 <d_content>
-Nội dung chương đã được VIẾT LẠI (REWRITE).
-Mở đầu bằng: "Đây là bản tóm tắt và cảm nhận nội dung..."
-Văn phong dồn dập, tập trung vào hành động và sự kiện chính.
-Kết thúc đột ngột tại cao trào.
+${rewriteText}
 </d_content>
+`;
+        return finalOutput;
 
----
-👇 **BẮT ĐẦU VIẾT NGAY BÊN DƯỚI (Dùng đúng thẻ <d_title>, ...)**:`;
-
-    try {
-        const summary = await generateText(prompt);
-        console.log(`✅ AI summarized chapter ${chapterNumber}`);
-        return summary.trim();
     } catch (error: any) {
-        console.error(`❌ AI summarization failed for chapter ${chapterNumber}:`, error.message);
-        throw new Error(`AI summarization failed: ${error.message}`);
+        console.error("❌ Error in 3-Step AI Pipeline:", error);
+        throw error;
     }
 };
 
