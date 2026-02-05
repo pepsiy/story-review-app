@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Loader2, Play, Pause, PlayCircle, Square } from "lucide-react";
+import { Loader2, Play, Pause, PlayCircle, Square, Settings } from "lucide-react";
 
 type CrawlJob = {
     id: number;
@@ -19,6 +19,7 @@ type CrawlJob = {
     failedChapters: number;
     autoMode: boolean;
     batchSize: number;
+    chaptersPerSummary: number | null; // Added field
     createdAt: string;
     startedAt: string | null;
     completedAt: string | null;
