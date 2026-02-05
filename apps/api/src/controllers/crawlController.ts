@@ -455,14 +455,21 @@ export async function processBatchBackground(jobId: number, count: number, workT
             .from(crawlChapters)
             .where(eq(crawlChapters.jobId, jobId));
 
+        const updateData: any = {
+            summarizedChapters: Number(stats[0]?.summarized || 0),
+            crawledChapters: Number(stats[0]?.crawled || 0),
+            failedChapters: Number(stats[0]?.failed || 0),
+            lastProcessedAt: new Date(),
+            status: errorCount > 0 ? 'paused' : 'ready'
+        };
+
+        // Disable Auto Mode if we paused due to error
+        if (errorCount > 0) {
+            updateData.autoMode = false;
+        }
+
         await db.update(crawlJobs)
-            .set({
-                summarizedChapters: Number(stats[0]?.summarized || 0),
-                crawledChapters: Number(stats[0]?.crawled || 0),
-                failedChapters: Number(stats[0]?.failed || 0),
-                lastProcessedAt: new Date(),
-                status: errorCount > 0 ? 'paused' : 'ready' // Pause on error, ready otherwise
-            })
+            .set(updateData)
             .where(eq(crawlJobs.id, jobId));
 
         // Send progress alert (every 50 chapters)
