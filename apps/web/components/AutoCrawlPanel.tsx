@@ -70,6 +70,21 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
         }
     };
 
+    // Auto-Run Logic
+    useEffect(() => {
+        if (!job || !job.autoMode) return;
+
+        // If job is ready and not processing, trigger next batch
+        if (job.status === 'ready' && !processing) {
+            const timer = setTimeout(() => {
+                const batchSize = job.batchSize || 5;
+                processBatch(batchSize);
+            }, 5000); // Wait 5s before next batch to be safe
+
+            return () => clearTimeout(timer);
+        }
+    }, [job, processing]);
+
     const refreshJobStatus = async (jobId?: number) => {
         if (!jobId && !job) return;
         const id = jobId || job?.id;
