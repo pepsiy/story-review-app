@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { Loader2, Play, Pause, PlayCircle, Square, Settings } from "lucide-react";
+import { Loader2, Play, Pause, PlayCircle, Square, Settings, Terminal } from "lucide-react";
+import { io } from "socket.io-client";
 
 type CrawlJob = {
     id: number;
@@ -44,8 +45,25 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
     const [countdown, setCountdown] = useState(0);
     const [mergeRatio, setMergeRatio] = useState(5); // Default 5 chapters -> 1 summary
     const [configBatchSize, setConfigBatchSize] = useState(5);
+    const [logs, setLogs] = useState<{ message: string; type: string; timestamp: string; jobId?: number }[]>([]);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+    // Socket Connection
+    useEffect(() => {
+        const socket = io(API_URL);
+
+        socket.on("crawl_log", (data) => {
+            // Only add log if it relates to current job or is general
+            if (!data.jobId || (job && data.jobId === job.id)) {
+                setLogs(prev => [data, ...prev].slice(0, 50)); // Keep last 50 logs
+            }
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [API_URL, job?.id]);
 
     useEffect(() => {
         checkExistingJob();
@@ -580,6 +598,30 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                     <strong>Last Error:</strong> {job.lastError}
                 </div>
             )}
+            {/* Real-time Logs Console */}
+            <div className="bg-gray-900 rounded-lg p-4 font-mono text-xs border border-gray-700 shadow-lg">
+                <div className="flex items-center gap-2 text-gray-400 mb-2 border-b border-gray-700 pb-2">
+                    <Terminal className="h-4 w-4" />
+                    <span className="font-semibold uppercase tracking-wider">Live Logs</span>
+                    {logs.length > 0 && <span className="ml-auto text-gray-500 cursor-pointer hover:text-white" onClick={() => setLogs([])}>Clear</span>}
+                </div>
+                <div className="h-48 overflow-y-auto space-y-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent pr-2">
+                    {logs.length === 0 ? (
+                        <div className="text-gray-600 italic">Waiting for logs...</div>
+                    ) : (
+                        logs.map((log, idx) => (
+                            <div key={idx} className={`flex gap-2 ${log.type === 'error' ? 'text-red-400' :
+                                    log.type === 'success' ? 'text-green-400' :
+                                        log.type === 'warning' ? 'text-yellow-400' : 'text-gray-300'
+                                }`}>
+                                <span className="text-gray-600 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                                <span>{log.message}</span>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+
         </div>
     );
 }

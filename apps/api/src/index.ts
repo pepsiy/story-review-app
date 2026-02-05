@@ -25,6 +25,10 @@ const io = new Server(server, {
   }
 });
 
+// Initialize Socket Service
+import { initSocket } from "./services/socketService";
+initSocket(io);
+
 io.on("connection", (socket) => {
   const userId = socket.handshake.query.userId;
   // console.log("User connected:", socket.id, "UserID:", userId);

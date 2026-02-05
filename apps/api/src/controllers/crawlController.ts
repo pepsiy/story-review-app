@@ -5,6 +5,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { crawlService } from "../services/crawlService";
 import { telegramService } from "../services/telegramService";
 import { summarizeChapter } from "../services/aiService";
+import { emitLog } from "../services/socketService";
 
 /**
  * Initialize crawl job - Crawl all chapter URLs
@@ -214,6 +215,7 @@ export async function processBatchBackground(jobId: number, count: number, workT
         // So we fetch 'count * mergeSize' source chapters.
         const fetchLimit = count * mergeSize;
 
+        emitLog(`🚀 Start Batch Job #${jobId}. Merging ${mergeSize} chaps/summary.`, 'info', jobId);
         console.log(`[Batch Debug] Job ${jobId}: Config Merge Size = ${mergeSize}, Fetching ${fetchLimit} pending chapters...`);
 
         // Get pending chapters
@@ -274,6 +276,7 @@ export async function processBatchBackground(jobId: number, count: number, workT
 
             try {
                 console.log(`📖 Processing chunk ${chunkTitle}...`);
+                emitLog(`🔄 Processing ${chunkTitle}...`, 'info', jobId);
 
                 // 1. Mark all as crawling
                 await db.update(crawlChapters)
@@ -422,9 +425,11 @@ export async function processBatchBackground(jobId: number, count: number, workT
                     .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
 
                 console.log(`✅ Chunk ${chunkTitle} completed & Saved to Chapters`);
+                emitLog(`✅ Chunk ${chunkTitle} Summarized & Saved!`, 'success', jobId);
 
             } catch (error: any) {
                 console.error(`❌ Error processing chunk ${chunkTitle}:`, error.message);
+                emitLog(`❌ Failed Chunk ${chunkTitle}: ${error.message}`, 'error', jobId);
 
                 // Mark all in chunk as failed
                 await db.update(crawlChapters)

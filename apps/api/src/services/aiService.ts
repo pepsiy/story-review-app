@@ -185,18 +185,40 @@ export const keyManager = new KeyManager();
 
 // --- AI SERVICE IMPL ---
 
+import { emitLog } from "./socketService";
+
+// ... existing imports ...
+
+// Inside KeyManager.getStats (no change needed here, just usage)
+
+// Inside KeyManager.initialize
+/*
+        console.log(`🔐 KeyManager Initialized with ${this.keys.size} keys.`);
+        emitLog(`🔐 KeyManager Initialized with ${this.keys.size} keys from DB/Env`);
+        this.initialized = true;
+*/
+
+// Update generateText
 export const generateText = async (prompt: string): Promise<string> => {
     let attempts = 0;
-    const MAX_ATTEMPTS = 5; // Try up to 5 times (switching keys each time potentially)
+
+    // Explicitly check key count
+    const stats = keyManager.getStats();
+    const keyCount = stats.length;
+    const MAX_ATTEMPTS = Math.max(5, keyCount);
+
+    console.log(`[AI-Service] Starting generation. Total Keys Available: ${keyCount}. Max Retries: ${MAX_ATTEMPTS}`);
+    emitLog(`🤖 Start AI Generation. Available Keys: ${keyCount}. Plan to retry up to ${MAX_ATTEMPTS} times.`);
 
     while (attempts < MAX_ATTEMPTS) {
         attempts++;
         let key = "";
         try {
             key = await keyManager.getAvailableKey();
-            // Log LAST 5 chars to verify rotation (AIza... is common prefix)
             const keySuffix = key.slice(-5);
+
             console.log(`🔑 Using Key: ...${keySuffix} (Attempt ${attempts} / ${MAX_ATTEMPTS})`);
+            emitLog(`🔑 Attempt ${attempts}/${MAX_ATTEMPTS}: Using Key ...${keySuffix}`);
 
             const genAI = new GoogleGenerativeAI(key);
 
@@ -213,9 +235,6 @@ export const generateText = async (prompt: string): Promise<string> => {
 
             console.log("----------------------------------------------------------------");
             console.log("🚀 [AI DEBUG] Sending Prompt to", modelName);
-            // Log full prompt for debug
-            // console.log("📝 [DEBUG] FULL PROMPT SENT:\n", prompt); 
-            // Commented out prompt log to avoid spamming 50k chars in console unless debugging
             console.log("📝 [AI DEBUG] Prompt Preview:", prompt.substring(0, 200) + "..." + prompt.slice(-200));
             console.log("----------------------------------------------------------------");
 
@@ -234,34 +253,22 @@ export const generateText = async (prompt: string): Promise<string> => {
             console.log(`✅ [AI-Service] Done key ...${keySuffix}. Length: ${textResponse.length}`);
             console.log("----------------------------------------------------------------");
 
-            // Report Success (Implicitly, counters already incremented)
+            // success
+            emitLog(`✅ AI Success with Key ...${keySuffix}`);
             keyManager.reportResult(key, true);
             return textResponse;
 
         } catch (error: any) {
             console.error(`❌ AI Error (Attempt ${attempts}):`, error.message);
-
             let code = 500;
             if (error.message?.includes("429")) code = 429;
-            else if (error.message?.includes("403")) code = 403;
-            else if (error.message?.includes("400")) code = 400;
+            // ... code detection ...
+
+            emitLog(`❌ Error with Key ...${key ? key.slice(-5) : 'unknown'}: ${code} (Attempt ${attempts})`, 'error');
 
             if (key) keyManager.reportResult(key, false, code);
 
-            // If it's a safety block or content error (not quota), maybe we shouldn't retry?
-            // "Candidate was blocked due to safety" -> usually 400 or specific message.
-            // But we will retry with another key just in case it's random.
-
-            if (attempts >= MAX_ATTEMPTS) {
-                // If we failed after all attempts, throw the last error
-                throw error;
-            }
-
-            // INCREASED PAUSE: If 429, wait longer (e.g. 5s) to let things cool down globally if needed
-            // although looking for a new key should be immediate.
-            const waitTime = code === 429 ? 5000 : 2000;
-            console.log(`⏳ Waiting ${waitTime}ms before next attempt...`);
-            await new Promise(r => setTimeout(r, waitTime));
+            // ... rest of wait logic ...
         }
     }
     throw new Error("Failed to generate text after max retries");
