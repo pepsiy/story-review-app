@@ -488,7 +488,8 @@ export async function processBatchBackground(jobId: number, count: number, workT
         await db.update(crawlJobs)
             .set({
                 status: 'failed',
-                lastError: error.message
+                lastError: error.message,
+                autoMode: false
             })
             .where(eq(crawlJobs.id, jobId));
     }
