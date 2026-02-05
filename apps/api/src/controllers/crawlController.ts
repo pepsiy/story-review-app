@@ -446,7 +446,8 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
         // Update job progress
         const stats = await db.select({
             summarized: sql<number>`COUNT(*) FILTER (WHERE status = 'completed')`,
-            failed: sql<number>`COUNT(*) FILTER (WHERE status = 'failed')`
+            failed: sql<number>`COUNT(*) FILTER (WHERE status = 'failed')`,
+            crawled: sql<number>`COUNT(*) FILTER (WHERE status = 'completed' OR status = 'summarizing' OR raw_content IS NOT NULL)`
         })
             .from(crawlChapters)
             .where(eq(crawlChapters.jobId, jobId));
@@ -454,6 +455,7 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
         await db.update(crawlJobs)
             .set({
                 summarizedChapters: Number(stats[0]?.summarized || 0),
+                crawledChapters: Number(stats[0]?.crawled || 0),
                 failedChapters: Number(stats[0]?.failed || 0),
                 lastProcessedAt: new Date(),
                 status: errorCount > 0 ? 'paused' : 'ready' // Pause on error, ready otherwise
@@ -481,6 +483,89 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
             .where(eq(crawlJobs.id, jobId));
     }
 }
+
+/**
+ * Repair Job: Reset 'completed' crawl_chapters that are missing in 'chapters' table
+ */
+export const repairJob = async (req: Request, res: Response) => {
+    try {
+        const { jobId } = req.params;
+        const id = parseInt(jobId);
+
+        // Get job
+        const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, id) });
+        if (!job) return res.status(404).json({ error: "Job not found" });
+
+        // Get all completed crawl_chapters
+        const completed = await db.query.crawlChapters.findMany({
+            where: and(
+                eq(crawlChapters.jobId, id),
+                eq(crawlChapters.status, 'completed')
+            )
+        });
+
+        let resetCount = 0;
+        const resetIds = [];
+
+        for (const cc of completed) {
+            // Check if exists in public chapters
+            const exists = await db.query.chapters.findFirst({
+                where: and(
+                    eq(chapters.workId, job.workId!),
+                    eq(chapters.chapterNumber, cc.chapterNumber)
+                )
+            });
+
+            if (!exists) {
+                resetIds.push(cc.id);
+                resetCount++;
+            }
+        }
+
+        if (resetIds.length > 0) {
+            await db.update(crawlChapters)
+                .set({ status: 'pending', summary: null, rawContent: null, summarizedAt: null })
+                .where(sql`${crawlChapters.id} IN ${resetIds}`);
+        }
+
+        res.json({
+            message: `Repair completed. Reset ${resetCount} chapters to 'pending'.`,
+            resetCount,
+            resetIds
+        });
+
+    } catch (error: any) {
+        console.error("Repair Job Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+/**
+ * Update Job Configuration (Batch Size, Merge Ratio)
+ */
+export const updateJobConfig = async (req: Request, res: Response) => {
+    try {
+        const { jobId } = req.params;
+        const { batchSize, chaptersPerSummary } = req.body;
+
+        const updateData: any = {};
+        if (batchSize !== undefined) updateData.batchSize = batchSize;
+        if (chaptersPerSummary !== undefined) updateData.chaptersPerSummary = chaptersPerSummary;
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ error: "No config provided" });
+        }
+
+        await db.update(crawlJobs)
+            .set(updateData)
+            .where(eq(crawlJobs.id, parseInt(jobId)));
+
+        res.json({ message: "Job config updated", config: updateData });
+    } catch (error: any) {
+        console.error("Job Config Update Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
 
 /**
  * Get crawl job status
