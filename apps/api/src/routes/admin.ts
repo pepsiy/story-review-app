@@ -54,13 +54,15 @@ import {
     resumeJob,
     getActiveJobs,
     testTelegramConnection,
-    extractWorkInfo
+    extractWorkInfo,
+    repairJob
 } from "../controllers/crawlController";
 router.post("/crawl/init", initCrawl);
 router.post("/crawl/extract-info", extractWorkInfo);
 router.post("/crawl/:jobId/process-batch", processBatch);
 router.get("/crawl/:jobId/status", getCrawlStatus);
 router.post("/crawl/:jobId/toggle-auto", toggleAutoMode);
+router.post("/crawl/:jobId/repair", repairJob); // NEW Repair Route
 router.post("/crawl/:jobId/pause", pauseJob);
 router.post("/crawl/:jobId/resume", resumeJob);
 router.get("/crawl/active", getActiveJobs);
