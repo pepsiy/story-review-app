@@ -333,15 +333,21 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                         </div>
                     </div>
                 </div>
-                {processing ? (
-                    <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Đang khởi tạo...
-                    </>
-                ) : (
-                    <>🚀 Initialize Crawl Job</>
-                )}
-            </Button>
+
+                <Button
+                    onClick={initCrawl}
+                    disabled={processing}
+                    className="w-full"
+                >
+                    {processing ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Đang khởi tạo...
+                        </>
+                    ) : (
+                        <>🚀 Initialize Crawl Job</>
+                    )}
+                </Button>
             </div >
         );
     }
