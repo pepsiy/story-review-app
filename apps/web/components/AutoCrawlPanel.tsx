@@ -70,20 +70,32 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
         }
     };
 
+    const [countdown, setCountdown] = useState(0);
+
     // Auto-Run Logic
     useEffect(() => {
-        if (!job || !job.autoMode) return;
+        if (!job || !job.autoMode) {
+            setCountdown(0);
+            return;
+        }
 
         // If job is ready and not processing, trigger next batch
         if (job.status === 'ready' && !processing) {
-            const timer = setTimeout(() => {
-                const batchSize = job.batchSize || 5;
-                processBatch(batchSize);
-            }, 5000); // Wait 5s before next batch to be safe
+            setCountdown(20); // Start 20s countdown
+            const timer = setInterval(() => {
+                setCountdown((prev) => {
+                    if (prev <= 1) {
+                        clearInterval(timer);
+                        processBatch(job.batchSize || 5); // Trigger batch
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
 
-            return () => clearTimeout(timer);
+            return () => clearInterval(timer);
         }
-    }, [job, processing]);
+    }, [job?.status, job?.autoMode, processing]);
 
     const refreshJobStatus = async (jobId?: number) => {
         if (!jobId && !job) return;
@@ -109,10 +121,16 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
 
         setProcessing(true);
         try {
+            // Defaulting chaptersPerSummary to 1 for now (Single Mode)
+            // TODO: Allow user to select Merge Mode (e.g., 5 chars -> 1 summary)
             const res = await fetch(`${API_URL}/admin/crawl/init`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ workId: parseInt(workId), sourceUrl })
+                body: JSON.stringify({
+                    workId: parseInt(workId),
+                    sourceUrl,
+                    chaptersPerSummary: 1 // Default to 1 (1-1 mapping)
+                })
             });
 
             const data = await res.json();
@@ -404,8 +422,17 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
             {/* Auto mode notice */}
             {job.autoMode && (
                 <div className="bg-green-50 border border-green-200 rounded p-3 text-sm text-green-800 flex items-center">
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Hệ thống đang tự động chạy nền (Mỗi 2 phút xử lý {job.batchSize || 5} chương). Bạn có thể làm việc khác.
+                    {countdown > 0 ? (
+                        <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Đang đợi {countdown}s để tóm tắt tiếp theo (Tránh quá tải API)...
+                        </>
+                    ) : (
+                        <>
+                            <Play className="h-4 w-4 mr-2" />
+                            Đang xử lý batch...
+                        </>
+                    )}
                 </div>
             )}
 
