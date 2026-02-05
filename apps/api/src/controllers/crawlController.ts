@@ -196,7 +196,7 @@ export const processBatch = async (req: Request, res: Response) => {
 /**
  * Background batch processing with Merge Support
  */
-async function processBatchBackground(jobId: number, count: number, workTitle: string) {
+export async function processBatchBackground(jobId: number, count: number, workTitle: string) {
     let errorCount = 0;
 
     try {
