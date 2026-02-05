@@ -188,6 +188,8 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
         const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
         if (!job) return;
 
+        console.log(`[Batch Debug] Job Data:`, JSON.stringify(job, null, 2));
+
         // UNIFIED LOGIC: "Batch Size" in UI = "Merge Size" (chaptersPerSummary)
         // We ensure we use the larger of chaptersPerSummary OR batchSize to be safe
         const mergeSize = Math.max(job.chaptersPerSummary || 1, job.batchSize || 1);
