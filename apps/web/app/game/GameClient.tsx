@@ -898,7 +898,7 @@ export default function GameClient() {
                                             <div className="w-full bg-white rounded p-2 mb-3 border border-purple-100 text-sm">
                                                 <div className="text-xs text-slate-500 mb-1">Nguyên Liệu:</div>
                                                 <div className="space-y-1">
-                                                    {recipe.ingredients.map((ing: any) => {
+                                                    {(typeof recipe.ingredients === 'string' ? JSON.parse(recipe.ingredients) : (recipe.ingredients || [])).map((ing: any) => {
                                                         // Resolve ing definition
                                                         const ingDef = state.itemsDef?.[ing.itemId];
                                                         const userHas = state.inventory.find(i => i.itemId === ing.itemId)?.quantity || 0;
