@@ -188,19 +188,15 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
         const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
         if (!job) return;
 
-        const mergeSize = job.chaptersPerSummary || 1;
-        // Adjust limit based on merge size to ensure we get enough chapters for at least one batch
-        // e.g. if mergeSize=5, and we want to process 2 batches (count=2), we need 10 chapters.
-        // But 'count' usually comes from 'batchSize' which implies Number of Summaries to produce?
-        // Or Number of source chapters?
-        // Let's assume 'count' is Number of Parallel Processings we want to do.
-        // If mergeSize > 1, strictly speaking we should process serially or carefully to maintain order.
-        // For safety in Merge Mode, let's process 1 merged-block at a time to avoid chaos, or just fetch 'count * mergeSize' chapters.
+        // UNIFIED LOGIC: "Batch Size" in UI = "Merge Size" (chaptersPerSummary)
+        // We ensure we use the larger of chaptersPerSummary OR batchSize to be safe
+        const mergeSize = Math.max(job.chaptersPerSummary || 1, job.batchSize || 1);
 
-        // Let's interpret 'count' as 'number of source chapters to attempt' roughly, but aligned to mergeSize.
-        // Actually, it's safer to just fetch a larger chunk of pending chapters and group them.
-
+        // Count in AutoMode is usually 1 (meaning 1 merged block). 
+        // So we fetch 'count * mergeSize' source chapters.
         const fetchLimit = count * mergeSize;
+
+        console.log(`[Batch Debug] Job ${jobId}: Config Merge Size = ${mergeSize}, Fetching ${fetchLimit} pending chapters...`);
 
         // Get pending chapters
         const pendingChapters = await db.query.crawlChapters.findMany({
