@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { db, systemSettings } from "../../../../packages/db/src";
 import { eq } from "drizzle-orm";
+import { emitLog } from "./socketService";
 
 // --- SMART KEY MANAGER ---
 
@@ -12,6 +13,7 @@ interface KeyUsage {
     totalRequestsToday: number;
     lastDailyReset: number;
     isDead: boolean; // If key is permanently invalid (400/403)
+    failedAttempts: number; // Track consecutive failures
 }
 
 class KeyManager {
@@ -68,7 +70,8 @@ class KeyManager {
                     cooldownUntil: 0,
                     totalRequestsToday: 0,
                     lastDailyReset: Date.now(),
-                    isDead: false
+                    isDead: false,
+                    failedAttempts: 0
                 });
             }
         });
@@ -160,15 +163,25 @@ class KeyManager {
         const usage = this.keys.get(key);
         if (!usage) return;
 
-        if (!success) {
-            if (statusCode === 429) {
-                console.warn(`⚠️ Key ...${key.slice(-5)} hit Rate Limit (429). Cooling for 60s.`);
-                usage.cooldownUntil = Date.now() + 60000;
-            }
-            if (statusCode === 400 || statusCode === 403) {
-                // Potentially mark dead, but safety first - just cool
-                usage.cooldownUntil = Date.now() + 60000;
-            }
+        if (success) {
+            usage.failedAttempts = 0; // Reset on success
+            return;
+        }
+
+        usage.failedAttempts = (usage.failedAttempts || 0) + 1;
+
+        if (statusCode === 429) {
+            // Smart Backoff: 1m, 5m, 15m, 1h
+            const backoffMinutes = [1, 5, 15, 60][Math.min(usage.failedAttempts - 1, 3)];
+            const backoffMs = backoffMinutes * 60 * 1000;
+
+            console.warn(`⚠️ Key ...${key.slice(-5)} hit Rate Limit (429). Fail #${usage.failedAttempts}. Cooling for ${backoffMinutes}m.`);
+            usage.cooldownUntil = Date.now() + backoffMs;
+        }
+        else if (statusCode === 400 || statusCode === 403 || statusCode === 500) {
+            // 403 usually means quota exceeded or invalid key. Cool for longer.
+            console.warn(`⚠️ Key ...${key.slice(-5)} Error ${statusCode}. Cooling for 5m.`);
+            usage.cooldownUntil = Date.now() + 5 * 60 * 1000;
         }
     }
 
@@ -186,20 +199,6 @@ export const keyManager = new KeyManager();
 
 // --- AI SERVICE IMPL ---
 
-import { emitLog } from "./socketService";
-
-// ... existing imports ...
-
-// Inside KeyManager.getStats (no change needed here, just usage)
-
-// Inside KeyManager.initialize
-/*
-        console.log(`🔐 KeyManager Initialized with ${this.keys.size} keys.`);
-        emitLog(`🔐 KeyManager Initialized with ${this.keys.size} keys from DB/Env`);
-        this.initialized = true;
-*/
-
-// Update generateText
 export const generateText = async (prompt: string): Promise<string> => {
     let attempts = 0;
 
@@ -239,7 +238,7 @@ export const generateText = async (prompt: string): Promise<string> => {
 
             console.log("----------------------------------------------------------------");
             console.log("🚀 [AI DEBUG] Sending Prompt to", modelName);
-            console.log("📝 [AI DEBUG] Prompt Preview:", prompt.substring(0, 200) + "..." + prompt.slice(-200));
+            // console.log("📝 [AI DEBUG] Prompt Preview:", prompt.substring(0, 200) + "..." + prompt.slice(-200));
             console.log("----------------------------------------------------------------");
 
             // Timeout wrapper (180s)
