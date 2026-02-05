@@ -82,17 +82,7 @@ async function crawlChapterListBackground(jobId: number, sourceUrl: string, work
         const chaptersList = await crawlService.crawlChapterList(sourceUrl);
 
         // Insert chapters
-        const chapterRecords = chaptersList.map(ch => ({
-            jobId,
-            workId: (async () => {
-                const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
-                return job?.workId || 0;
-            })(),
-            chapterNumber: ch.number,
-            title: ch.title,
-            sourceUrl: ch.url,
-            status: 'pending' as const
-        }));
+
 
         // Resolve workId
         const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
