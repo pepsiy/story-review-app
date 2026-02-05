@@ -411,6 +411,44 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                 </div>
             </div>
 
+            {/* Configuration Section (Editable for Active Jobs) */}
+            <div className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                        <Settings className="h-4 w-4" /> Cấu hình Batch
+                    </h3>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={saveConfig}
+                        disabled={loading || processing}
+                    >
+                        Lưu cấu hình
+                    </Button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <Label htmlFor="configBatchSize">Số chương gộp (Batch Size)</Label>
+                        <div className="flex items-center gap-2 mt-1">
+                            <Input
+                                id="configBatchSize"
+                                type="number"
+                                min={1}
+                                max={50}
+                                value={configBatchSize}
+                                onChange={(e) => setConfigBatchSize(parseInt(e.target.value) || 5)}
+                                className="w-24"
+                            />
+                            <span className="text-sm text-gray-500">chương / 1 lần tóm tắt</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Hệ thống sẽ gom {configBatchSize} chương gốc thành 1 bản tóm tắt.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             {/* Controls */}
             <div className="flex gap-2 flex-wrap items-center bg-gray-50 p-3 rounded-lg border">
                 <div className="flex gap-2 mr-auto">
