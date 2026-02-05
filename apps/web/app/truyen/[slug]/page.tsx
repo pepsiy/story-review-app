@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { LikeButton } from "@/components/LikeButton";
 import { ViewTracker } from "@/components/ViewTracker";
 
+export const revalidate = 60; // Revalidate every 60 seconds
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;
     const work = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
