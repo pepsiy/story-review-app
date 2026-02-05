@@ -44,10 +44,11 @@ class KeyManager {
         }
 
         // 2. Try Env
+        // Split by comma OR newline to support multi-line env values
         const envKeys = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "")
-            .split(",")
-            .map(k => k.trim())
-            .filter(k => k.length > 0);
+            .split(/[,\n]+/)
+            .map(k => k.trim().replace(/^['"]|['"]$/g, '')) // Remove quotes if present
+            .filter(k => k.length > 0 && !k.startsWith("#"));
 
         // Merge unique
         const allKeys = Array.from(new Set([...keyList, ...envKeys]));
