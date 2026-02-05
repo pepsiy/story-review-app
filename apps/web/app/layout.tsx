@@ -38,6 +38,9 @@ export const metadata: Metadata = {
     title: "Tóm Tắt Truyện - Review & Tóm tắt nhanh",
     description: "Nền tảng review và tóm tắt truyện tranh, tiểu thuyết nhanh gọn.",
   },
+  icons: {
+    icon: '/icon.png',
+  },
 };
 
 import { Header } from "@/components/Header";
