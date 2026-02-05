@@ -226,7 +226,12 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
 
             const data = await res.json();
             if (res.ok) {
-                toast.success(`🤖 Đang xử lý ${count} chapters...`);
+                const isBatch = configBatchSize > 1;
+                toast.success(
+                    isBatch
+                        ? `🤖 Đang xử lý ${count} gói (Mỗi gói ${configBatchSize} chương)...`
+                        : `🤖 Đang xử lý ${count} chương...`
+                );
                 setTimeout(() => refreshJobStatus(), 1000);
             } else {
                 toast.error(`❌ Lỗi: ${data.error}`);
