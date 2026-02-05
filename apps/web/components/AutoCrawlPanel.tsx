@@ -40,6 +40,8 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
     const [failedChapters, setFailedChapters] = useState<FailedChapter[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
+    const [countdown, setCountdown] = useState(0);
+    const [mergeRatio, setMergeRatio] = useState(5); // Default 5 chapters -> 1 summary
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -69,8 +71,6 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
             setLoading(false);
         }
     };
-
-    const [countdown, setCountdown] = useState(0);
 
     // Auto-Run Logic
     useEffect(() => {
@@ -129,7 +129,7 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                 body: JSON.stringify({
                     workId: parseInt(workId),
                     sourceUrl,
-                    chaptersPerSummary: 1 // Default to 1 (1-1 mapping)
+                    chaptersPerSummary: mergeRatio // Use selected ratio
                 })
             });
 
@@ -270,8 +270,25 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                         value={sourceUrl}
                         onChange={(e) => setSourceUrl(e.target.value)}
                         placeholder="https://truyenfull.vision/..."
-                        className="font-mono text-sm"
+                        className="font-mono text-sm mb-3"
                     />
+
+                    <div className="flex items-center gap-2 mb-4">
+                        <Label htmlFor="mergeRatio">Gộp chương (Chapters per Summary):</Label>
+                        <select
+                            id="mergeRatio"
+                            value={mergeRatio}
+                            onChange={(e) => setMergeRatio(parseInt(e.target.value))}
+                            className="border rounded p-1 text-sm bg-white"
+                        >
+                            <option value={1}>1:1 (Giữ nguyên)</option>
+                            <option value={5}>5:1 (Gộp 5 chương)</option>
+                            <option value={10}>10:1 (Gộp 10 chương)</option>
+                        </select>
+                        <span className="text-xs text-gray-500">
+                            (Chọn 5:1 để gộp 5 chương gốc thành 1 chương tóm tắt)
+                        </span>
+                    </div>
                 </div>
 
                 <Button
