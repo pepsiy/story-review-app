@@ -304,56 +304,45 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
 
 
 
-                // --- NEW PARSING LOGIC (PIPE DELIMITER) ---
-                const parts = aiResponseText.split("|||");
+                // --- IMPROVED PARSING LOGIC ---
+                // Split by ||| but handle potential newlines/spaces around it
+                const parts = aiResponseText.split(/\|\|\|/g).map(p => p.trim());
 
                 // Initialize variables
                 let title = chunkTitle;
-                title = chunkTitle;
                 let shortSummary = "";
                 let fullContent = "";
-                let gameEvents = [];
+                let gameEvents: any[] = []; // Explicit type
 
-                if (parts.length >= 4) {
-                    // Part 1: Title
-                    title = parts[0].trim().replace(/^\[+|\]+$/g, '').trim();
-                    // Part 2: Short Summary
-                    shortSummary = parts[1].trim().replace(/^\[+|\]+$/g, '').trim();
-                    // Part 3: Content
-                    fullContent = parts[2].trim().replace(/^\[+|\]+$/g, '').trim();
-                    // Part 4: Game Events
-                    try {
-                        const eventJson = parts[3].trim().replace(/^\[+|\]+$/g, '').trim();
-                        // Sometimes AI wraps it in markdown code block again JSON
-                        const cleanJson = eventJson.replace(/```json/g, '').replace(/```/g, '').trim();
-                        // Add brackets back if removed by regex above but were part of array syntax
-                        // Actually, easier to just parse. regex above removed outer [] needed for array?
-                        // Let's rely on JSON.parse finding the array. 
-                        // If we stripped [], we need to add them back.
-                        // But regex `replace(/^\[+|\]+$/g, '')` removes ALL leading/trailing brackets.
-                        // For JSON array, we WANT brackets.
+                if (parts.length >= 3) {
+                    // Part 0: Title (Ensure it's not empty)
+                    if (parts[0].length > 0) title = parts[0].replace(/^\[+|\]+$/g, '').trim();
 
-                        // Re-extract raw from parts to be safe
-                        let rawEvents = parts[3].trim();
-                        // Remove markdown
-                        rawEvents = rawEvents.replace(/```json/g, '').replace(/```/g, '').trim();
-                        gameEvents = JSON.parse(rawEvents);
+                    // Part 1: Short Summary
+                    shortSummary = parts[1].replace(/^\[+|\]+$/g, '').trim();
 
-                        if (!Array.isArray(gameEvents)) gameEvents = [];
-                        console.log(`🎮 [Game Events Detected]`, gameEvents);
-                    } catch (e) {
-                        console.warn("⚠️ Failed to parse Game Events JSON", e);
-                        gameEvents = [];
+                    // Part 2: Content (and potentially events if merged)
+                    // Check if Part 2 contains Game Events JSON-like structure or if there is a Part 3
+                    if (parts.length >= 4) {
+                        fullContent = parts[2].replace(/^\[+|\]+$/g, '').trim();
+                        // Part 3: Game Events
+                        const eventRaw = parts[3];
+                        try {
+                            const cleanJson = eventRaw.replace(/```json/g, '').replace(/```/g, '').trim();
+                            const parsed = JSON.parse(cleanJson);
+                            if (Array.isArray(parsed)) gameEvents = parsed;
+                        } catch (e) {
+                            console.warn("⚠️ Failed to parse Game Events JSON", e);
+                        }
+                    } else {
+                        // Only 3 parts found, so Part 2 is content. 
+                        fullContent = parts[2].replace(/^\[+|\]+$/g, '').trim();
                     }
-
-                } else if (parts.length >= 3) {
-                    // Backward compatibility or AI forgot 4th part
-                    title = parts[0].trim().replace(/^\[+|\]+$/g, '').trim();
-                    shortSummary = parts[1].trim().replace(/^\[+|\]+$/g, '').trim();
-                    fullContent = parts.slice(2).join("|||").trim().replace(/^\[+|\]+$/g, '').trim();
                 } else {
                     console.warn(`[Crawl Warning] Could not split based on '|||'. Using raw text fallback.`);
-                    shortSummary = aiResponseText.substring(0, 300) + "...";
+                    // If split failed but text is long, maybe try newline splitting?
+                    // For now, fallback to raw but try to avoid setting summary to huge text
+                    shortSummary = aiResponseText.substring(0, 500) + "...";
                     fullContent = aiResponseText;
                 }
 
