@@ -194,7 +194,9 @@ export const generateText = async (prompt: string): Promise<string> => {
         let key = "";
         try {
             key = await keyManager.getAvailableKey();
-            console.log(`🔑 Using Key: ${key.slice(0, 4)}... (Attempt ${attempts})`);
+            // Log LAST 5 chars to verify rotation (AIza... is common prefix)
+            const keySuffix = key.slice(-5);
+            console.log(`🔑 Using Key: ...${keySuffix} (Attempt ${attempts} / ${MAX_ATTEMPTS})`);
 
             const genAI = new GoogleGenerativeAI(key);
 
@@ -229,7 +231,7 @@ export const generateText = async (prompt: string): Promise<string> => {
 
             console.log("----------------------------------------------------------------");
             console.log("📄 [AI DEBUG] RAW AI OUTPUT PREVIEW:\n", textResponse.substring(0, 200) + "...");
-            console.log(`✅ [AI-Service] Done. Length: ${textResponse.length}`);
+            console.log(`✅ [AI-Service] Done key ...${keySuffix}. Length: ${textResponse.length}`);
             console.log("----------------------------------------------------------------");
 
             // Report Success (Implicitly, counters already incremented)
@@ -251,10 +253,15 @@ export const generateText = async (prompt: string): Promise<string> => {
             // But we will retry with another key just in case it's random.
 
             if (attempts >= MAX_ATTEMPTS) {
+                // If we failed after all attempts, throw the last error
                 throw error;
             }
-            // Small pause
-            await new Promise(r => setTimeout(r, 1000));
+
+            // INCREASED PAUSE: If 429, wait longer (e.g. 5s) to let things cool down globally if needed
+            // although looking for a new key should be immediate.
+            const waitTime = code === 429 ? 5000 : 2000;
+            console.log(`⏳ Waiting ${waitTime}ms before next attempt...`);
+            await new Promise(r => setTimeout(r, waitTime));
         }
     }
     throw new Error("Failed to generate text after max retries");
