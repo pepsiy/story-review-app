@@ -27,8 +27,18 @@ const getUserGameState = async (userId: string) => {
         return acc;
     }, {} as Record<string, any>);
 
+    // Parse active_buffs if string
+    let parsedBuffs = [];
+    if (user.activeBuffs) {
+        try {
+            parsedBuffs = typeof user.activeBuffs === 'string'
+                ? JSON.parse(user.activeBuffs)
+                : user.activeBuffs;
+        } catch (e) { parsedBuffs = []; }
+    }
+
     return {
-        user,
+        user: { ...user, activeBuffs: parsedBuffs },
         plots,
         inventory: userInventory,
         itemsDef: itemsMap
