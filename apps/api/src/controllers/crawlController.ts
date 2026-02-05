@@ -130,7 +130,7 @@ async function crawlChapterListBackground(jobId: number, sourceUrl: string, work
 export const processBatch = async (req: Request, res: Response) => {
     try {
         const { jobId } = req.params;
-        const { count = 5 } = req.body;
+        const { count = 5, batchSize, chaptersPerSummary } = req.body;
 
         const job = await db.query.crawlJobs.findFirst({
             where: eq(crawlJobs.id, parseInt(jobId))
@@ -138,6 +138,22 @@ export const processBatch = async (req: Request, res: Response) => {
 
         if (!job) {
             return res.status(404).json({ error: "Job not found" });
+        }
+
+        // AUTO-UPDATE CONFIG IF PROVIDED (Sync UI with Backend)
+        if (batchSize !== undefined || chaptersPerSummary !== undefined) {
+            const updateData: any = {};
+            if (batchSize !== undefined) updateData.batchSize = batchSize;
+            if (chaptersPerSummary !== undefined) updateData.chaptersPerSummary = chaptersPerSummary;
+
+            await db.update(crawlJobs)
+                .set(updateData)
+                .where(eq(crawlJobs.id, parseInt(jobId)));
+
+            // Update local job object for immediate use check (though we fetch again inside BG it's safer)
+            if (batchSize) job.batchSize = batchSize;
+            if (chaptersPerSummary) job.chaptersPerSummary = chaptersPerSummary;
+            console.log(`[Batch] Config auto-updated from UI request: BatchSize=${batchSize}`);
         }
 
         if (job.status === 'completed') {
