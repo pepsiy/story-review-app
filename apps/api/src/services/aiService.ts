@@ -203,6 +203,9 @@ import { emitLog } from "./socketService";
 export const generateText = async (prompt: string): Promise<string> => {
     let attempts = 0;
 
+    // Ensure initialized to get correct count
+    await keyManager.initialize();
+
     // Explicitly check key count
     const stats = keyManager.getStats();
     const keyCount = stats.length;
