@@ -42,6 +42,7 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
     const [processing, setProcessing] = useState(false);
     const [countdown, setCountdown] = useState(0);
     const [mergeRatio, setMergeRatio] = useState(5); // Default 5 chapters -> 1 summary
+    const [configBatchSize, setConfigBatchSize] = useState(5);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -53,6 +54,14 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
 
         return () => clearInterval(interval);
     }, [workId, job?.id]);
+
+    // Sync local state when job loads
+    useEffect(() => {
+        if (job) {
+            // Priority: chaptersPerSummary -> batchSize -> 5
+            setConfigBatchSize(job.chaptersPerSummary || job.batchSize || 5);
+        }
+    }, [job?.id, job?.chaptersPerSummary, job?.batchSize]);
 
     const checkExistingJob = async () => {
         try {
@@ -72,6 +81,30 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
         }
     };
 
+    // Save Configuration
+    const saveConfig = async () => {
+        if (!job) return;
+        try {
+            const res = await fetch(`${API_URL}/admin/crawl/${job.id}/update-config`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    batchSize: configBatchSize,
+                    chaptersPerSummary: configBatchSize // Sync both
+                })
+            });
+            if (res.ok) {
+                toast.success("Cập nhật cấu hình thành công!");
+                refreshJobStatus(job.id);
+            } else {
+                toast.error("Lỗi cập nhật cấu hình");
+            }
+        } catch (error) {
+            console.error("Error saving config:", error);
+            toast.error("Lỗi kết nối");
+        }
+    };
+
     // Auto-Run Logic
     useEffect(() => {
         if (!job || !job.autoMode) {
@@ -86,7 +119,8 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                 setCountdown((prev) => {
                     if (prev <= 1) {
                         clearInterval(timer);
-                        processBatch(job.batchSize || 5); // Trigger batch
+                        // IMPORTANT: Process 1 "Unit" of summary (which consumes N source chapters)
+                        processBatch(1);
                         return 0;
                     }
                     return prev - 1;
@@ -129,7 +163,9 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                 body: JSON.stringify({
                     workId: parseInt(workId),
                     sourceUrl,
-                    chaptersPerSummary: mergeRatio // Use selected ratio
+                    // Use the configured value for init
+                    chaptersPerSummary: configBatchSize,
+                    batchSize: configBatchSize
                 })
             });
 
@@ -260,52 +296,53 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                     </p>
                 </div>
 
-                <div>
-                    <Label htmlFor="sourceUrl">Source URL</Label>
-                    <p className="text-sm text-gray-500 mb-2">
-                        Ví dụ: https://truyenfull.vision/tien-nghich
-                    </p>
-                    <Input
-                        id="sourceUrl"
-                        value={sourceUrl}
-                        onChange={(e) => setSourceUrl(e.target.value)}
-                        placeholder="https://truyenfull.vision/..."
-                        className="font-mono text-sm mb-3"
-                    />
-
-                    <div className="flex items-center gap-2 mb-4">
-                        <Label htmlFor="mergeRatio">Gộp chương (Chapters per Summary):</Label>
-                        <select
-                            id="mergeRatio"
-                            value={mergeRatio}
-                            onChange={(e) => setMergeRatio(parseInt(e.target.value))}
-                            className="border rounded p-1 text-sm bg-white"
+                {/* Configuration Section (Editable) */}
+                <div className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                            <Settings className="h-4 w-4" /> Cấu hình Batch
+                        </h3>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={saveConfig}
+                            disabled={loading || processing}
                         >
-                            <option value={1}>1:1 (Giữ nguyên)</option>
-                            <option value={5}>5:1 (Gộp 5 chương)</option>
-                            <option value={10}>10:1 (Gộp 10 chương)</option>
-                        </select>
-                        <span className="text-xs text-gray-500">
-                            (Chọn 5:1 để gộp 5 chương gốc thành 1 chương tóm tắt)
-                        </span>
+                            Lưu cấu hình
+                        </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="configBatchSize">Số chương gộp (Batch Size)</Label>
+                            <div className="flex items-center gap-2 mt-1">
+                                <Input
+                                    id="configBatchSize"
+                                    type="number"
+                                    min={1}
+                                    max={50}
+                                    value={configBatchSize}
+                                    onChange={(e) => setConfigBatchSize(parseInt(e.target.value) || 5)}
+                                    className="w-24"
+                                />
+                                <span className="text-sm text-gray-500">chương / 1 lần tóm tắt</span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Hệ thống sẽ gom {configBatchSize} chương gốc thành 1 bản tóm tắt.
+                            </p>
+                        </div>
                     </div>
                 </div>
-
-                <Button
-                    onClick={initCrawl}
-                    disabled={processing}
-                    className="w-full"
-                >
-                    {processing ? (
-                        <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Đang khởi tạo...
-                        </>
-                    ) : (
-                        <>🚀 Initialize Crawl Job</>
-                    )}
-                </Button>
-            </div>
+                {processing ? (
+                    <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Đang khởi tạo...
+                    </>
+                ) : (
+                    <>🚀 Initialize Crawl Job</>
+                )}
+            </Button>
+            </div >
         );
     }
 
