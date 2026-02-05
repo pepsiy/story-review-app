@@ -221,7 +221,12 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
             const res = await fetch(`${API_URL}/admin/crawl/${job.id}/process-batch`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ count })
+                body: JSON.stringify({
+                    count,
+                    // Pass current config to backend to ensure sync
+                    batchSize: configBatchSize,
+                    chaptersPerSummary: configBatchSize
+                }),
             });
 
             const data = await res.json();
