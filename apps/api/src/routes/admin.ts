@@ -66,4 +66,8 @@ router.post("/crawl/:jobId/resume", resumeJob);
 router.get("/crawl/active", getActiveJobs);
 router.post("/telegram/test", testTelegramConnection);
 
+import { scanAndFixGaps } from "../controllers/gapController";
+router.post("/crawl/scan-gaps", scanAndFixGaps);
+
+
 export default router;

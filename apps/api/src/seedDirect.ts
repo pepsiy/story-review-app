@@ -1,4 +1,9 @@
 
+import dotenv from "dotenv";
+import path from "path";
+// Load .env from monorepo root
+dotenv.config({ path: path.resolve(__dirname, "../../../../.env") });
+
 import { db } from "../../../packages/db/src";
 import { gameItems } from "../../../packages/db/src";
 import { ITEMS, RECIPES } from "./data/gameData";
