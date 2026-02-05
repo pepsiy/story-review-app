@@ -161,7 +161,7 @@ class KeyManager {
 
         if (!success) {
             if (statusCode === 429) {
-                console.warn(`⚠️ Key ${key.slice(0, 4)}... hit Rate Limit (429). Cooling for 60s.`);
+                console.warn(`⚠️ Key ...${key.slice(-5)} hit Rate Limit (429). Cooling for 60s.`);
                 usage.cooldownUntil = Date.now() + 60000;
             }
             if (statusCode === 400 || statusCode === 403) {
