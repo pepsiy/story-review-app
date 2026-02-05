@@ -370,16 +370,43 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                         ? String(startChap)
                         : `${startChap},${endChap}`;
 
-                    await db.insert(chapters).values({
-                        workId: chunk[0].workId,
-                        chapterNumber: newChapterNumber,
-                        title: title,
-                        originalText: combinedContent,
-                        aiText: fullContent,
-                        summary: shortSummary,
-                        sourceChapterRange: sourceRange,
-                        status: 'PUBLISHED'
+                    // Check overlap
+                    const existingChap = await db.query.chapters.findFirst({
+                        where: and(
+                            eq(chapters.workId, chunk[0].workId),
+                            eq(chapters.chapterNumber, newChapterNumber)
+                        )
                     });
+
+                    if (existingChap) {
+                        console.log(`⚠️ Chapter ${newChapterNumber} in Work ${chunk[0].workId} already exists. Updating content...`);
+                        await db.update(chapters)
+                            .set({
+                                title: title,
+                                originalText: combinedContent,
+                                aiText: fullContent,
+                                summary: shortSummary,
+                                sourceChapterRange: sourceRange,
+                                status: 'PUBLISHED',
+                                createdAt: new Date() // Bump timestamp to show update
+                            })
+                            .where(eq(chapters.id, existingChap.id));
+                    } else {
+                        await db.insert(chapters).values({
+                            workId: chunk[0].workId,
+                            chapterNumber: newChapterNumber,
+                            title: title,
+                            originalText: combinedContent,
+                            aiText: fullContent,
+                            summary: shortSummary,
+                            sourceChapterRange: sourceRange,
+                            status: 'PUBLISHED'
+                        });
+                        console.log(`✅ Inserted Chapter ${newChapterNumber} to public table.`);
+                    }
+                } else {
+                    console.error("❌ CRITICAL: workId missing in chunk[0]", chunk[0]);
+                    throw new Error("Missing workId in chunk processing");
                 }
 
                 // Mark source crawling chapters as completed
@@ -389,12 +416,9 @@ async function processBatchBackground(jobId: number, count: number, workTitle: s
                         summarizedAt: new Date(),
                         status: 'completed'
                     })
-
                     .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
 
-
-
-                console.log(`✅ Chunk ${chunkTitle} completed`);
+                console.log(`✅ Chunk ${chunkTitle} completed & Saved to Chapters`);
 
             } catch (error: any) {
                 console.error(`❌ Error processing chunk ${chunkTitle}:`, error.message);
