@@ -1,6 +1,5 @@
-
-import { db } from "../packages/db/src";
-import { crawlChapters, chapters } from "../packages/db/src";
+import { db } from "../../../packages/db/src";
+import { crawlChapters, chapters } from "../../../packages/db/src";
 import { eq, and } from "drizzle-orm";
 
 async function manualSync() {
@@ -19,6 +18,8 @@ async function manualSync() {
     for (const cc of completedCrawlChapters) {
         console.log(`Checking Sync for Chapter ${cc.chapterNumber} (Work: ${cc.workId})...`);
 
+        if (!cc.workId) continue;
+
         // Check if exists in chapters
         const existing = await db.query.chapters.findFirst({
             where: and(
@@ -33,6 +34,10 @@ async function manualSync() {
             console.log(`❌ Chapter ${cc.chapterNumber} MISSING in public table. Syncing now...`);
 
             try {
+                if (!cc.workId) {
+                    console.error(`Missing workId for chapter ${cc.chapterNumber}`);
+                    continue;
+                }
                 await db.insert(chapters).values({
                     workId: cc.workId,
                     chapterNumber: cc.chapterNumber,

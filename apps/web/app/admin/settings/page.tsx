@@ -108,8 +108,8 @@ export default function AdminSettingsPage() {
                 <button
                     onClick={() => setActiveTab('gemini')}
                     className={`px-4 py-2 font-medium transition ${activeTab === 'gemini'
-                            ? 'text-indigo-600 border-b-2 border-indigo-600'
-                            : 'text-gray-500 hover:text-gray-700'
+                        ? 'text-indigo-600 border-b-2 border-indigo-600'
+                        : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     🤖 Gemini AI
@@ -117,8 +117,8 @@ export default function AdminSettingsPage() {
                 <button
                     onClick={() => setActiveTab('telegram')}
                     className={`px-4 py-2 font-medium transition ${activeTab === 'telegram'
-                            ? 'text-indigo-600 border-b-2 border-indigo-600'
-                            : 'text-gray-500 hover:text-gray-700'
+                        ? 'text-indigo-600 border-b-2 border-indigo-600'
+                        : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     📱 Telegram Alerts
@@ -126,8 +126,8 @@ export default function AdminSettingsPage() {
                 <button
                     onClick={() => setActiveTab('crawl')}
                     className={`px-4 py-2 font-medium transition ${activeTab === 'crawl'
-                            ? 'text-indigo-600 border-b-2 border-indigo-600'
-                            : 'text-gray-500 hover:text-gray-700'
+                        ? 'text-indigo-600 border-b-2 border-indigo-600'
+                        : 'text-gray-500 hover:text-gray-700'
                         }`}
                 >
                     🕷️ Auto-Crawl
@@ -148,6 +148,20 @@ export default function AdminSettingsPage() {
                             onChange={(e) => updateSetting('GEMINI_API_KEY', e.target.value)}
                             placeholder="AIzaSy..."
                             className="font-mono text-sm"
+                        />
+                    </div>
+
+                    <div>
+                        <Label htmlFor="geminiPaidKey" className="text-base text-amber-700">Gemini Paid Keys (Tier 1+)</Label>
+                        <p className="text-sm text-gray-500 mb-2">
+                            Keys trả phí (1000 RPM, 1.5M TPM). Được ưu tiên sử dụng và có hạn mức cao hơn.
+                        </p>
+                        <Input
+                            id="geminiPaidKey"
+                            value={settings.GEMINI_PAID_KEYS || ''}
+                            onChange={(e) => updateSetting('GEMINI_PAID_KEYS', e.target.value)}
+                            placeholder="AIzaSy... (Paid Key)"
+                            className="font-mono text-sm border-amber-200 bg-amber-50"
                         />
                     </div>
                 )}

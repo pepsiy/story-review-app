@@ -14,6 +14,8 @@ interface KeyUsage {
     lastDailyReset: number;
     isDead: boolean; // If key is permanently invalid (400/403)
     failedAttempts: number; // Track consecutive failures
+    rpmLimit: number;
+    rpdLimit: number;
 }
 
 class KeyManager {
@@ -21,8 +23,8 @@ class KeyManager {
     private keyList: string[] = []; // To support Round Robin by index
     private lastUsedIndex = -1; // Pointer for Round Robin
 
-    private readonly RATE_LIMIT_RPM = 60; // Increased for Paid Keys.
-    private readonly RATE_LIMIT_RPD = 10000;
+    private readonly RATE_LIMIT_RPM = 60; // Fallback
+    private readonly RATE_LIMIT_RPD = 10000; // Fallback
     private readonly WINDOW_SIZE_MS = 60000; // 1 minute
     private initialized = false;
 
@@ -62,8 +64,31 @@ class KeyManager {
         }
 
         // Initialize state for new keys
+        // Check for Paid Keys Env & DB
+        let dbPaidKeys: string[] = [];
+        try {
+            const dbPaid = await db.query.systemSettings.findFirst({
+                where: eq(systemSettings.key, "GEMINI_PAID_KEYS")
+            });
+            if (dbPaid && dbPaid.value) {
+                dbPaidKeys = dbPaid.value.split(/[,\n]+/).map(k => k.trim()).filter(k => k.length > 0);
+            }
+        } catch (e) {
+            console.warn("⚠️ Failed to fetch paid keys from DB", e);
+        }
+
+        const envPaidKeys = (process.env.GEMINI_PAID_KEYS || "")
+            .split(/[,\n]+/)
+            .map(k => k.trim().replace(/^['"]|['"]$/g, ''))
+            .filter(k => k.length > 0);
+
+        const paidKeysSet = new Set([...dbPaidKeys, ...envPaidKeys]);
+
         allKeys.forEach(k => {
             if (!this.keys.has(k)) {
+                // Determine limits based on Paid status
+                const isPaid = paidKeysSet.has(k);
+
                 this.keys.set(k, {
                     key: k,
                     requestsInCurrentWindow: 0,
@@ -72,7 +97,9 @@ class KeyManager {
                     totalRequestsToday: 0,
                     lastDailyReset: Date.now(),
                     isDead: false,
-                    failedAttempts: 0
+                    failedAttempts: 0,
+                    rpmLimit: isPaid ? 1000 : 15, // Ultra-safe for Free (15 RPM), Paid (1000 RPM)
+                    rpdLimit: isPaid ? 10000 : 1500 // 1.5M TPM / 1500 RPD for Free
                 });
             }
         });
@@ -119,9 +146,17 @@ class KeyManager {
                 usage.totalRequestsToday = 0;
                 usage.lastDailyReset = now;
             }
-            if (usage.totalRequestsToday >= this.RATE_LIMIT_RPD) {
+
+            const effectiveRPD = usage.rpdLimit || this.RATE_LIMIT_RPD;
+            if (usage.totalRequestsToday >= effectiveRPD) {
+                // STRICT DAILY RESET: Sleep until next reset (approx 24h from last reset)
                 const cooldown = 86400000 - (now - usage.lastDailyReset);
-                minWaitTime = Math.min(minWaitTime, cooldown);
+                const safeCooldown = cooldown > 0 ? cooldown : 60000;
+
+                console.warn(`⏳ Key ...${keyStr.slice(-5)} Hit Daily Limit (${usage.totalRequestsToday}/${effectiveRPD}). Sleeping for ${(safeCooldown / 1000 / 3600).toFixed(1)}h.`);
+                usage.cooldownUntil = now + safeCooldown;
+
+                minWaitTime = Math.min(minWaitTime, safeCooldown);
                 continue;
             }
 
@@ -131,7 +166,8 @@ class KeyManager {
                 usage.windowStartTime = now;
             }
 
-            if (usage.requestsInCurrentWindow < this.RATE_LIMIT_RPM) {
+            const effectiveRPM = usage.rpmLimit || this.RATE_LIMIT_RPM;
+            if (usage.requestsInCurrentWindow < effectiveRPM) {
                 // FOUND VALID KEY!
                 // Update Index
                 this.lastUsedIndex = targetIndex;
@@ -209,7 +245,18 @@ class KeyManager {
     }
 }
 
+    public reset() {
+    this.initialized = false;
+    this.keys.clear();
+    console.log("♻️ KeyManager reset via Admin Settings. Will reload keys on next request.");
+}
+}
+
 export const keyManager = new KeyManager();
+
+export const reloadKeys = () => {
+    keyManager.reset();
+};
 
 // --- AI SERVICE IMPL ---
 

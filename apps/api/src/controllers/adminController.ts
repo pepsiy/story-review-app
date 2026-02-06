@@ -338,9 +338,13 @@ export const getSettings = async (req: Request, res: Response) => {
     }
 };
 
+import { reloadKeys } from "../services/aiService";
+
 export const updateSettings = async (req: Request, res: Response) => {
     try {
         const settingsToUpdate = req.body; // Expect { "GEMINI_API_KEY": "value" }
+
+        let keysUpdated = false;
 
         for (const [key, value] of Object.entries(settingsToUpdate)) {
             if (typeof value === 'string') {
@@ -350,7 +354,14 @@ export const updateSettings = async (req: Request, res: Response) => {
                         target: systemSettings.key,
                         set: { value, updatedAt: new Date() }
                     });
+
+                if (key.includes('GEMINI')) keysUpdated = true;
             }
+        }
+
+        if (keysUpdated) {
+            reloadKeys();
+            console.log("🔄 Triggered Key Reload due to settings update");
         }
 
         res.json({ message: "Settings updated successfully" });
