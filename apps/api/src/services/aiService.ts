@@ -179,7 +179,6 @@ class KeyManager {
 
         if (statusCode === 429) {
             // Smart Backoff: 15s, 1m, 5m, 15m
-            // Reduce first penalty to 15s to handle "hiccups"
             const backoffMsValues = [15000, 60000, 300000, 900000];
             const index = Math.min(usage.failedAttempts - 1, 3);
             const backoffMs = backoffMsValues[index];
@@ -187,9 +186,10 @@ class KeyManager {
             console.warn(`⚠️ Key ...${key.slice(-5)} hit Rate Limit (429). Fail #${usage.failedAttempts}. Cooling for ${backoffMs / 1000}s.`);
             usage.cooldownUntil = Date.now() + backoffMs;
         }
-        else if (statusCode === 400 || statusCode === 403 || statusCode === 500) {
-            // 403 usually means quota exceeded or invalid key. Cool for longer.
-            // 500 is server error, also cool down
+        else if (statusCode === 400 || statusCode === 403 || statusCode === 500 || statusCode === 404) {
+            // Revert to simple cooling for all other errors.
+            // 404 might be model missing, 403 might be temporarily restricted.
+            // Don't kill the key yet, just cool it down.
             console.warn(`⚠️ Key ...${key.slice(-5)} Error ${statusCode}. Cooling for 5m.`);
             usage.cooldownUntil = Date.now() + 5 * 60 * 1000;
         }
@@ -203,7 +203,7 @@ class KeyManager {
                 key: usage.key.slice(0, 5) + "...",
                 rpm: `${usage.requestsInCurrentWindow}/${this.RATE_LIMIT_RPM}`,
                 today: `${usage.totalRequestsToday}/${this.RATE_LIMIT_RPD}`,
-                status: usage.isDead ? "DEAD" : (usage.cooldownUntil > Date.now() ? `COOLING (${Math.ceil((usage.cooldownUntil - Date.now()) / 1000)}s)` : "READY")
+                status: usage.isDead ? "DEAD 💀" : (usage.cooldownUntil > Date.now() ? `COOLING (${Math.ceil((usage.cooldownUntil - Date.now()) / 1000)}s)` : "READY")
             };
         });
     }
@@ -240,9 +240,8 @@ export const generateText = async (prompt: string): Promise<string> => {
 
             const genAI = new GoogleGenerativeAI(key);
 
-            // Start with Gemini 1.5 Flash for high throughput & stability
-            // 2.5 Flash has very low RPM (3-5) on some tiers
-            const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+            // REVERT: Force Model 2.5 Flash as requested
+            const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 generationConfig: {
