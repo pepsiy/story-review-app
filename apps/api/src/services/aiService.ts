@@ -18,8 +18,8 @@ interface KeyUsage {
 
 class KeyManager {
     private keys: Map<string, KeyUsage> = new Map();
-    private readonly RATE_LIMIT_RPM = 12; // Free Tier is 15. Set 12 to be safe.
-    private readonly RATE_LIMIT_RPD = 1400; // Free Tier is 1500. Set 1450 safe.
+    private readonly RATE_LIMIT_RPM = 60; // Increased for Paid Keys. Let Google 429 handle the real limit.
+    private readonly RATE_LIMIT_RPD = 10000; // Increased significantly.
     private readonly WINDOW_SIZE_MS = 60000; // 1 minute
     private initialized = false;
 
@@ -171,11 +171,13 @@ class KeyManager {
         usage.failedAttempts = (usage.failedAttempts || 0) + 1;
 
         if (statusCode === 429) {
-            // Smart Backoff: 1m, 5m, 15m, 1h
-            const backoffMinutes = [1, 5, 15, 60][Math.min(usage.failedAttempts - 1, 3)];
-            const backoffMs = backoffMinutes * 60 * 1000;
+            // Smart Backoff: 15s, 1m, 5m, 15m
+            // Reduce first penalty to 15s to handle "hiccups"
+            const backoffMsValues = [15000, 60000, 300000, 900000];
+            const index = Math.min(usage.failedAttempts - 1, 3);
+            const backoffMs = backoffMsValues[index];
 
-            console.warn(`⚠️ Key ...${key.slice(-5)} hit Rate Limit (429). Fail #${usage.failedAttempts}. Cooling for ${backoffMinutes}m.`);
+            console.warn(`⚠️ Key ...${key.slice(-5)} hit Rate Limit (429). Fail #${usage.failedAttempts}. Cooling for ${backoffMs / 1000}s.`);
             usage.cooldownUntil = Date.now() + backoffMs;
         }
         else if (statusCode === 400 || statusCode === 403 || statusCode === 500) {
