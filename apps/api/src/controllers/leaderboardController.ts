@@ -62,12 +62,12 @@ export const getLeaderboard = async (req: Request, res: Response) => {
                         name: users.name,
                         image: users.image,
                         cultivationLevel: users.cultivationLevel,
-                        arenaPoints: users.arenaPoints,
+                        rankingPoints: users.rankingPoints,
                         seasonWins: users.seasonWins,
                         cultivationExp: users.cultivationExp
                     })
                     .from(users)
-                    .orderBy(desc(users.arenaPoints), desc(users.seasonWins), desc(users.cultivationExp))
+                    .orderBy(desc(users.rankingPoints), desc(users.seasonWins), desc(users.cultivationExp))
                     .limit(requestedLimit);
                 break;
 
@@ -146,7 +146,7 @@ export const getUserRank = async (req: Request, res: Response) => {
                 const arenaResult = await db
                     .select({ count: sql<number>`count(*)` })
                     .from(users)
-                    .where(sql`${users.arenaPoints} > ${user.arenaPoints || 0}`);
+                    .where(sql`${users.rankingPoints} > ${user.rankingPoints || 0}`);
                 rank = (arenaResult[0]?.count || 0) + 1;
 
                 const arenaTotal = await db
