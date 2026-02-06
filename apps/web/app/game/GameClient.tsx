@@ -282,7 +282,12 @@ export default function GameClient() {
             });
             const data = await res.json();
             if (data.missions) {
-                setMissions(data.missions);
+                // Construct Wrapper Objects explicitly to match State Definition
+                const wrappedMissions = data.missions.map((m: any) => ({
+                    mission: m,
+                    userMission: data.userMissions?.find((um: any) => um.missionId === m.id) || null
+                }));
+                setMissions(wrappedMissions);
                 setUserMissions(data.userMissions || []);
             }
         } catch (e) {
