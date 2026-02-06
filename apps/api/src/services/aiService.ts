@@ -243,13 +243,12 @@ class KeyManager {
             };
         });
     }
-}
 
     public reset() {
-    this.initialized = false;
-    this.keys.clear();
-    console.log("♻️ KeyManager reset via Admin Settings. Will reload keys on next request.");
-}
+        this.initialized = false;
+        this.keys.clear();
+        console.log("♻️ KeyManager reset via Admin Settings. Will reload keys on next request.");
+    }
 }
 
 export const keyManager = new KeyManager();
