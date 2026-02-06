@@ -200,6 +200,8 @@ export default function GameClient() {
             }
         } catch (error) {
             toast.error("Có lỗi xảy ra");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -759,15 +761,15 @@ export default function GameClient() {
     };
 
     useEffect(() => {
-        if (activeTab === 'SECT' && state.user?.id) {
+        if (activeTab === 'SECT' && state?.user?.id) {
             fetchMySect();
             fetchSects();
         }
-        if (activeTab === 'PVP' && state.user?.id) {
+        if (activeTab === 'PVP' && state?.user?.id) {
             fetchPvpStatus();
             fetchArenaStatus();
         }
-    }, [activeTab, state.user?.id]);
+    }, [activeTab, state?.user?.id]);
 
 
     if (status === "loading" || (loading && status === "authenticated")) {
