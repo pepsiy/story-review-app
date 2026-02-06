@@ -750,7 +750,7 @@ export default function GameClient() {
                     } else {
                         clearInterval(interval);
                         setArenaResult(data); // Show result
-                        fetchGameState(); // Update rewards
+                        fetchState(); // Update rewards
                         fetchArenaStatus(); // Update history
                     }
                 }, 800); // 0.8s per round
@@ -1211,8 +1211,9 @@ export default function GameClient() {
                                         {userMissions
                                             .filter(um => um.status === 'IN_PROGRESS')
                                             .map(um => {
-                                                const mission = missions.find(m => m.id === um.missionId);
-                                                if (!mission) return null;
+                                                const missionWrapper = missions.find(m => m.mission.id === um.missionId);
+                                                if (!missionWrapper) return null;
+                                                const { mission } = missionWrapper;
 
                                                 let canComplete = false;
                                                 let progressText = "";
@@ -1269,25 +1270,28 @@ export default function GameClient() {
                             {/* Available Missions */}
                             <div>
                                 <h4 className="text-sm font-semibold text-slate-600 mb-2">Nhiệm Vụ Khả Dụng</h4>
-                                {missions.filter(m => !userMissions.some(um => um.missionId === m.id && um.status === 'IN_PROGRESS')).length === 0 ? (
+                                {missions.filter(m => !userMissions.some(um => um.missionId === m.mission.id && um.status === 'IN_PROGRESS')).length === 0 ? (
                                     <p className="text-slate-400 text-sm italic">Hết nhiệm vụ khả dụng.</p>
                                 ) : (
                                     <div className="space-y-2">
                                         {missions
-                                            .filter(m => !userMissions.some(um => um.missionId === m.id && um.status === 'IN_PROGRESS'))
-                                            .map(mission => (
-                                                <div key={mission.id} className="border border-slate-200 bg-slate-50 rounded-lg p-3 hover:bg-slate-100 transition-colors">
-                                                    <div className="flex justify-between items-center">
-                                                        <div>
-                                                            <h5 className="font-bold text-slate-700 text-sm">{mission.title}</h5>
-                                                            <div className="text-xs text-orange-600 mt-0.5">Thưởng: {mission.rewardGold} Vàng • {mission.rewardExp} Exp</div>
+                                            .filter(m => !userMissions.some(um => um.missionId === m.mission.id && um.status === 'IN_PROGRESS'))
+                                            .map(wrapper => {
+                                                const { mission } = wrapper;
+                                                return (
+                                                    <div key={mission.id} className="border border-slate-200 bg-slate-50 rounded-lg p-3 hover:bg-slate-100 transition-colors">
+                                                        <div className="flex justify-between items-center">
+                                                            <div>
+                                                                <h5 className="font-bold text-slate-700 text-sm">{mission.title}</h5>
+                                                                <div className="text-xs text-orange-600 mt-0.5">Thưởng: {mission.rewardGold} Vàng • {mission.rewardExp} Exp</div>
+                                                            </div>
+                                                            <Button size="sm" variant="outline" onClick={() => acceptMission(mission.id)}>
+                                                                Nhận
+                                                            </Button>
                                                         </div>
-                                                        <Button size="sm" variant="outline" onClick={() => acceptMission(mission.id)}>
-                                                            Nhận
-                                                        </Button>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                     </div>
                                 )}
                             </div>
