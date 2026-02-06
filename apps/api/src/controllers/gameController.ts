@@ -65,7 +65,7 @@ const getGameLogsHelper = async (userId: string) => {
 
 // --- Controllers ---
 
-const getGameState = async (req: Request, res: Response) => {
+export const getGameState = async (req: Request, res: Response) => {
     try {
         const { userId } = req.body;
         if (!userId) return res.status(400).json({ error: "User ID required" });
