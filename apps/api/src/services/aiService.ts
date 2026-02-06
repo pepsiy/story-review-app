@@ -345,7 +345,7 @@ ${content.substring(0, 100000)}
 |||
 
 **PHẦN 4: SỰ KIỆN GAME (GAME TAGS) - CHO HỆ THỐNG GAME TU TIÊN**
-- Phân tích nội dung chương và trả về danh sách các sự kiện (Tags) để kích hoạt buff/debuff trong game.
+- Phân tích nội dung chương và trả về danh sách các sự kiện (Tags) để kích hoạt buff/debuff/PVE trong game.
 - Định dạng: JSON Array các chuỗi (String).
 - Danh sách sự kiện hợp lệ (Chỉ chọn nếu có tình tiết tương ứng):
     - "HEAVY_RAIN": Có mưa lớn, bão tố. (Buff: Cây lớn nhanh)
@@ -354,7 +354,10 @@ ${content.substring(0, 100000)}
     - "AUCTION": Có đấu giá, mua bán trao đổi. (Buff: Giảm giá Shop)
     - "MEDITATION": Nhân vật bế quan, tu luyện, ngồi thiền. (Buff: Tăng EXP nhận được)
     - "DANGER": Nhân vật gặp nguy hiểm, bị truy sát. (Debuff: Giảm tỷ lệ đột phá)
-- Ví dụ: ["HEAVY_RAIN", "BATTLE"] hoặc [] nếu không có sự kiện nào nổi bật.
+    - "BEAST_WOLF": Xuất hiện quái vật Sói Hoang (cấp độ thấp). (PVE: Spawn Beast)
+    - "BEAST_TIGER": Xuất hiện quái vật Hổ Núi (cấp độ trung). (PVE: Spawn Beast)
+    - "BEAST_DRAGON": Xuất hiện quái vật Giao Long (cấp độ cao). (PVE: Spawn Beast)
+- Ví dụ: ["HEAVY_RAIN", "BATTLE", "BEAST_WOLF"] hoặc [] nếu không có sự kiện nào nổi bật.
 - Chỉ trả về mảng JSON, không thêm text khác.
 
 

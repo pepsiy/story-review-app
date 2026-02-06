@@ -1,133 +1,105 @@
 import "dotenv/config";
 import { db } from "../../../packages/db/src";
-import { works, chapters, gameItems } from "../../../packages/db/src";
+import { works, chapters, gameItems, missions } from "../../../packages/db/src";
+import { ITEMS, RECIPES, DAILY_MISSIONS } from "./data/gameData";
 
 async function main() {
     console.log("🌱 Seeding database...");
 
-    // 0. Clean up existing data
-    // WARNING: Do not wipe Works/Chapters in production!
+    // 0. Clean up existing data - commented out for safety
     // await db.delete(chapters);
     // await db.delete(works);
-    // console.log("🧹 Cleared old data");
 
-    // 1. Create Work (Example Data - Commented out to preserve user data)
-    /*
-    const insertedWorks = await db.insert(works).values({
-        title: "Đấu Phá Thương Khung",
-        slug: "dau-pha-thuong-khung",
-        author: "Thiên Tàm Thổ Đậu",
-        coverImage: "https://upload.wikimedia.org/wikipedia/vi/1/15/%C4%90%E1%BA%A5u_Ph%C3%A1_Th%C6%B0%C6%A1ng_Khung.jpg",
-        status: "COMPLETED",
-        genre: "Tiên Hiệp",
-        description: "Tiêu Viêm, thiên tài tu luyện đấu khí của gia tộc Tiêu...",
-        isHot: true,
-        views: 0
-    }).returning();
-
-    const work = insertedWorks[0];
-    console.log(`✅ Created Work: ${work.title}`);
-
-    // 2. Create Chapter
-    await db.insert(chapters).values({
-        workId: work.id,
-        chapterNumber: 1,
-        title: "Vẫn Lạc Đích Thiên Tài",
-        originalText: "Secret original text...",
-        aiText: "<p>Tiêu Viêm...</p>",
-        summary: "Tiêu Viêm bị từ hôn...",
-        youtubeId: "dQw4w9WgXcQ", 
-        status: "PUBLISHED"
-    });
-    console.log("✅ Created Chapter 1");
-    */
-
-    // 3. Seed Game Items
-    await db.delete(gameItems); // Clean old items
-
-    await db.insert(gameItems).values([
-        // Seeds
-        {
-            id: 'seed_linh_thao',
-            name: 'Hạt Linh Thảo',
-            type: 'SEED',
-            price: 10,
-            growTime: 60, // 60s
-            icon: '🌿',
-            description: 'Hạt giống Linh Thảo cơ bản.'
-        },
-        {
-            id: 'seed_nhan_sam',
-            name: 'Hạt Nhân Sâm',
-            type: 'SEED',
-            price: 50,
-            growTime: 300, // 5 mins
-            icon: '🥕',
-            description: 'Hạt giống Nhân Sâm quý hiếm.'
-        },
-        // Products (Herbs)
-        {
-            id: 'herb_linh_thao',
-            name: 'Linh Thảo',
-            type: 'PRODUCT',
-            sellPrice: 15, // Profit 5
-            minYield: 1,
-            maxYield: 3, // Random 1-3
-            icon: '🍃',
-            description: 'Linh thảo chứa linh khí cơ bản.'
-        },
-        {
-            id: 'herb_nhan_sam',
-            name: 'Nhân Sâm',
-            type: 'PRODUCT',
-            sellPrice: 80, // Profit 30
-            minYield: 1,
-            maxYield: 2,
-            icon: '🥕',
-            description: 'Nhân sâm ngàn năm (fake).'
-        },
-        // Pills / Consumables
-        {
-            id: 'pill_truc_co',
-            name: 'Trúc Cơ Đan',
-            type: 'CONSUMABLE',
-            sellPrice: 200,
-            exp: 500,
-            icon: '💊',
-            description: 'Đan dược giúp đột phá Trúc Cơ.',
-            ingredients: JSON.stringify([
-                { itemId: 'herb_linh_thao', quantity: 10 },
-                { itemId: 'herb_nhan_sam', quantity: 2 }
-            ])
+    // 3. Seed Game Items (Sync with gameData.ts)
+    // Upsert items
+    for (const itemKey in ITEMS) {
+        const itemDef = ITEMS[itemKey];
+        // Resolve recipe if exists
+        let recipeIngredients = null;
+        if (RECIPES[itemKey]) {
+            recipeIngredients = JSON.stringify(RECIPES[itemKey].ingredients);
         }
-    ]);
+
+        await db.insert(gameItems).values({
+            id: itemDef.id,
+            name: itemDef.name,
+            type: itemDef.type,
+            price: itemDef.price || 0,
+            sellPrice: itemDef.sellPrice || 0,
+            growTime: itemDef.growTime || 0,
+            exp: itemDef.exp || 0,
+            description: itemDef.description,
+            icon: '📦', // Default
+            ingredients: recipeIngredients
+        }).onConflictDoUpdate({
+            target: gameItems.id,
+            set: {
+                name: itemDef.name,
+                price: itemDef.price || 0,
+                sellPrice: itemDef.sellPrice || 0,
+                growTime: itemDef.growTime || 0,
+                exp: itemDef.exp || 0,
+                description: itemDef.description,
+                ingredients: recipeIngredients
+            }
+        });
+    }
     console.log("✅ Seeded Game Items");
 
-    // 4. Seed Missions (Optional - can be done in Admin later, but good for starting)
-    // Only insert if not exist to avoid overwriting edits
-    /*
-    await db.insert(missions).values([
-        {
-            title: "Thu thập Linh Thảo",
-            description: "Tông môn đang cần 10 cây Linh Thảo để luyện đan.",
-            type: "COLLECT",
-            requiredItemId: "herb_linh_thao",
-            requiredQuantity: 10,
-            rewardGold: 100,
-            rewardExp: 50
-        },
-        {
-            title: "Cống nạp Nhân Sâm",
-            description: "Đại trưởng lão cần Nhân Sâm để bồi bổ.",
-            type: "COLLECT",
-            requiredItemId: "herb_nhan_sam",
-            requiredQuantity: 5,
-            rewardGold: 500,
-            rewardExp: 200
-        }
-    ]);
-    console.log("✅ Seeded Initial Missions");
-    */
+    // 4. Seed Missions
+    for (const mission of DAILY_MISSIONS) {
+        await db.insert(missions).values({
+            id: mission.id,
+            title: mission.title,
+            description: mission.description,
+            type: mission.type,
+            requiredAction: mission.requiredAction || null, // Add requiredAction
+            rewardGold: mission.rewardGold,
+            rewardExp: mission.rewardExp,
+            requiredQuantity: mission.requiredCount,
+        }).onConflictDoUpdate({
+            target: missions.id,
+            set: {
+                title: mission.title,
+                description: mission.description,
+                type: mission.type,
+                requiredAction: mission.requiredAction || null, // Add requiredAction
+                rewardGold: mission.rewardGold,
+                rewardExp: mission.rewardExp,
+                requiredQuantity: mission.requiredCount
+            }
+        });
+    }
+    console.log("✅ Seeded Missions");
+
+    // 5. Seed Beasts
+    const { beasts } = await import("../../../packages/db/src");
+    const { BEASTS } = await import("./data/gameData");
+
+    for (const beast of BEASTS) {
+        await db.insert(beasts).values({
+            id: beast.id,
+            name: beast.name,
+            description: beast.description,
+            health: beast.health,
+            attack: beast.attack,
+            defense: beast.defense,
+            icon: beast.icon,
+            lootTable: JSON.stringify(beast.lootTable)
+        }).onConflictDoUpdate({
+            target: beasts.id,
+            set: {
+                name: beast.name,
+                description: beast.description,
+                health: beast.health,
+                attack: beast.attack,
+                defense: beast.defense,
+                icon: beast.icon,
+                lootTable: JSON.stringify(beast.lootTable)
+            }
+        });
+    }
+    console.log("✅ Seeded Beasts");
 
     console.log("🎉 Seeding completed!");
     process.exit(0);

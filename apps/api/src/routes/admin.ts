@@ -73,5 +73,11 @@ router.post("/telegram/test", testTelegramConnection);
 import { scanAndFixGaps } from "../controllers/gapController";
 router.post("/crawl/scan-gaps", scanAndFixGaps);
 
+// Mission Management Routes (Admin)
+import { getAllMissionsAdmin, createMission, updateMission, deleteMission } from "../controllers/missionController";
+router.get("/missions", getAllMissionsAdmin);
+router.post("/missions", createMission);
+router.put("/missions/:id", updateMission);
+router.delete("/missions/:id", deleteMission);
 
 export default router;

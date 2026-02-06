@@ -56,6 +56,13 @@ export const reviews = pgTable('reviews', {
     workId: integer('work_id').references(() => works.id).notNull(),
     content: text('content').notNull(),
     rating: integer('rating'), // 1-5 sao
+    cultivationExp: integer('cultivation_exp').default(0),
+
+    // PVP & Ranking (Phase 3)
+    raidsToday: integer('raids_today').default(0),
+    lastRaidReset: timestamp('last_raid_reset').defaultNow(),
+    protectionUntil: timestamp('protection_until'), // Protection cooldown after being raided
+
     createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -134,6 +141,16 @@ export const users = pgTable("user", {
     // Phase 5: Professions
     professionAlchemyLevel: integer("profession_alchemy_level").default(1),
     professionAlchemyExp: integer("profession_alchemy_exp").default(0),
+
+    // Phase 22: PVP Raids
+    raidsToday: integer("raids_today").default(0),
+    lastRaidReset: timestamp("last_raid_reset").defaultNow(),
+    protectionUntil: timestamp("protection_until"),
+
+    // Phase 24: Ranking
+    rankingPoints: integer("ranking_points").default(0),
+    rankTier: text("rank_tier").default("BRONZE"),
+    seasonWins: integer("season_wins").default(0),
 });
 
 export const accounts = pgTable(
@@ -291,15 +308,18 @@ export const gameItems = pgTable('game_items', {
 
 // Bảng Nhiệm Vụ (Mission/Quest Definitions)
 export const missions = pgTable('missions', {
-    id: serial('id').primaryKey(),
+    id: text('id').primaryKey(), // Changed to Text for manual IDs (e.g. 'mission_daily_water')
     title: text('title').notNull(),
     description: text('description'),
 
     // Requirements
     minCultivation: text('min_cultivation'), // e.g., 'Phàm Nhân'
 
-    // Type: 'COLLECT' (nộp vật phẩm), 'HUNT' (chưa có), 'SYSTEM' (đăng nhập)
+    // Type: 'COLLECT' (nộp vật phẩm), 'HUNT' (chưa có), 'SYSTEM' (đăng nhập), 'PROGRESS' (tưới nước, thu hoạch)
     type: text('type').default('COLLECT').notNull(),
+
+    // Required Action (for PROGRESS type): 'WATER', 'HARVEST', 'PLANT', 'CRAFT', etc.
+    requiredAction: text('required_action'),
 
     // Config for COLLECT
     requiredItemId: text('required_item_id'),
@@ -317,7 +337,7 @@ export const missions = pgTable('missions', {
 export const userMissions = pgTable('user_missions', {
     id: serial('id').primaryKey(),
     userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
-    missionId: integer('mission_id').references(() => missions.id, { onDelete: 'cascade' }).notNull(),
+    missionId: text('mission_id').references(() => missions.id, { onDelete: 'cascade' }).notNull(), // Changed to text reference
 
     status: text('status').default('IN_PROGRESS'), // IN_PROGRESS, COMPLETED, FAILED
     progress: integer('progress').default(0), // Count for collection/kills
@@ -346,6 +366,89 @@ export const friendships = pgTable('friendships', {
     return {
         userTargetIdx: index('user_target_idx').on(table.userId, table.targetUserId),
     };
+});
+
+// Bảng Quái Vật (Beasts) - PVE
+export const beasts = pgTable('beasts', {
+    id: text('id').primaryKey(), // 'beast_wolf', 'beast_tiger'
+    name: text('name').notNull(),
+    description: text('description'),
+
+    // Stats
+    health: integer('health').default(100).notNull(),
+    attack: integer('attack').default(10).notNull(),
+    defense: integer('defense').default(5).notNull(),
+
+    // Loot (JSON array of items)
+    lootTable: text('loot_table'), // [{"itemId": "herb_x", "quantity": 5, "chance": 0.7}]
+
+    // Visual
+    icon: text('icon'), // Emoji or image URL
+
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Bảng Giao Tranh với Quái (User Beast Encounters)
+export const userBeastEncounters = pgTable('user_beast_encounters', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    beastId: text('beast_id').references(() => beasts.id).notNull(),
+
+    // Battle state
+    beastHealth: integer('beast_health').notNull(), // Current health of beast in this encounter
+    status: text('status').default('ACTIVE').notNull(), // ACTIVE, VICTORY, DEFEAT, FLED
+
+    startedAt: timestamp('started_at').defaultNow(),
+    completedAt: timestamp('completed_at'),
+}, (table) => {
+    return {
+        userActiveIdx: index('user_beast_active_idx').on(table.userId, table.status),
+    };
+});
+
+// Bảng Raid Logs (PVP Raids)
+export const raidLogs = pgTable('raid_logs', {
+    id: serial('id').primaryKey(),
+    attackerId: text('attacker_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    victimId: text('victim_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+    success: boolean('success').notNull(),
+    goldStolen: integer('gold_stolen').default(0),
+
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        attackerIdx: index('raid_attacker_idx').on(table.attackerId),
+        victimIdx: index('raid_victim_idx').on(table.victimId),
+    };
+});
+
+// Bảng Arena Battles (Phase 23)
+export const arenaBattles = pgTable('arena_battles', {
+    id: serial('id').primaryKey(),
+    player1Id: text('player1_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    player2Id: text('player2_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    winnerId: text('winner_id').references(() => users.id),
+
+    battleLog: text('battle_log'), // JSON stringified battle rounds
+    player1Reward: integer('player1_reward').default(0),
+    player2Reward: integer('player2_reward').default(0),
+
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        player1Idx: index('arena_player1_idx').on(table.player1Id),
+        player2Idx: index('arena_player2_idx').on(table.player2Id),
+    };
+});
+
+// Bảng Ranking Rewards (Phase 24)
+export const rankingRewards = pgTable('ranking_rewards', {
+    id: serial('id').primaryKey(),
+    tier: text('tier').notNull().unique(),
+    minPoints: integer('min_points').notNull(),
+    rewardGold: integer('reward_gold').default(0),
+    rewardItems: text('reward_items'), // JSON array
 });
 
 // Bảng Tông Môn (Sects)

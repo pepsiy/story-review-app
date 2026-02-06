@@ -62,6 +62,56 @@ type UserMission = {
     completedAt?: string;
 };
 
+type Beast = {
+    id: string;
+    name: string;
+    description?: string;
+    health: number;
+    attack: number;
+    defense: number;
+    icon?: string;
+    lootTable: string;
+};
+
+type BeastEncounter = {
+    encounter: {
+        id: number;
+        userId: string;
+        beastId: string;
+        beastHealth: number;
+        status: string;
+    };
+    beast: Beast;
+};
+
+type RaidLog = {
+    id: number;
+    attackerId: string;
+    victimId: string;
+    success: boolean;
+    goldStolen: number;
+    createdAt: string;
+    attacker?: { name: string };
+    victim?: { name: string };
+};
+
+type ArenaBattle = {
+    id: number;
+    player1Id: string;
+    player2Id: string;
+    winnerId: string;
+    player1Reward: number;
+    player2Reward: number;
+    createdAt: string;
+};
+
+type TierInfo = {
+    tier: string;
+    icon: string;
+    minPoints: number;
+    currentPoints: number;
+};
+
 type GameState = {
     user: UserState;
     plots: Plot[];
@@ -111,13 +161,28 @@ export default function GameClient() {
     const { data: session, status } = useSession();
     const [loading, setLoading] = useState(true);
     const [state, setState] = useState<GameState | null>(null);
-    const [missions, setMissions] = useState<Mission[]>([]);
+    const [missions, setMissions] = useState<{ mission: Mission; userMission: UserMission | null }[]>([]);
     const [userMissions, setUserMissions] = useState<UserMission[]>([]);
-    const [logs, setLogs] = useState<GameLog[]>([]);
-    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-    const [sects, setSects] = useState<any[]>([]); // List of sects to join
+    const [logs, setLogs] = useState<any[]>([]);
+    const [leaderboard, setLeaderboard] = useState<any[]>([]);
+    const [sects, setSects] = useState<any[]>([]);
+    const [userSect, setUserSect] = useState<any>(null);
+    const [alchemyItems, setAlchemyItems] = useState<any[]>([]);
+    const [beastEncounter, setBeastEncounter] = useState<BeastEncounter | null>(null);
+    const [beastModalOpen, setBeastModalOpen] = useState(false); // List of sects to join
     const [mySect, setMySect] = useState<any>(null); // Current sect info
-    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS' | 'LEADERBOARD' | 'SECT'>('FARM');
+    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS' | 'LEADERBOARD' | 'SECT' | 'PVP'>('FARM');
+
+    // PVP State
+    const [pvpSubTab, setPvpSubTab] = useState<'RAID' | 'ARENA'>('RAID');
+    const [raidLogs, setRaidLogs] = useState<RaidLog[]>([]);
+    const [protection, setProtection] = useState<any>(null);
+    const [arenaBattles, setArenaBattles] = useState<ArenaBattle[]>([]);
+    const [myTier, setMyTier] = useState<any>(null);
+    const [arenaOpponent, setArenaOpponent] = useState<any>(null);
+    const [arenaBattleLog, setArenaBattleLog] = useState<any[]>([]);
+    const [arenaResult, setArenaResult] = useState<any>(null);
+    const [arenaModalOpen, setArenaModalOpen] = useState(false);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -133,8 +198,73 @@ export default function GameClient() {
             if (data.user) {
                 setState(data);
             }
-        } catch (e) {
-            console.error("Fetch State Error", e);
+        } catch (error) {
+            toast.error("Có lỗi xảy ra");
+        }
+    };
+
+    // ========== Beast Functions ==========
+    const checkBeastEncounter = async () => {
+        try {
+            const res = await fetch(`${API_URL}/game/beast/current`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session!.user!.id })
+            });
+            const data = await res.json();
+            if (data.encounter) {
+                setBeastEncounter(data.encounter);
+                setBeastModalOpen(true);
+            }
+        } catch (error) {
+            console.error('Check beast error:', error);
+        }
+    };
+
+    const attackBeast = async () => {
+        try {
+            const res = await fetch(`${API_URL}/game/beast/attack`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session!.user!.id })
+            });
+            const data = await res.json();
+
+            if (data.result === 'VICTORY') {
+                toast.success(`Chiến thắng! Nhận được: ${data.loot.map((l: any) => `${l.quantity}x ${l.itemId}`).join(', ')}`);
+                setBeastModalOpen(false);
+                setBeastEncounter(null);
+                fetchState();
+                // fetchInventory(); // Assuming fetchState covers inventory
+            } else {
+                // Update beast health
+                if (beastEncounter) {
+                    setBeastEncounter({
+                        ...beastEncounter,
+                        encounter: { ...beastEncounter.encounter, beastHealth: data.beastHealth }
+                    });
+                }
+                toast.info(`Gây ${data.playerDamage} sát thương! Quái phản công ${data.beastDamage} sát thương.`);
+            }
+        } catch (error) {
+            toast.error('Không thể tấn công');
+        }
+    };
+
+    const fleeBeast = async () => {
+        try {
+            const res = await fetch(`${API_URL}/game/beast/flee`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session!.user!.id })
+            });
+            if (res.ok) {
+                toast.success('Trốn thoát thành công!');
+                setBeastModalOpen(false);
+                setBeastEncounter(null);
+            }
+        } catch (error) {
+            toast.error('Không thể trốn thoát');
         } finally {
             setLoading(false);
         }
@@ -209,6 +339,7 @@ export default function GameClient() {
             fetchMissions();
             fetchLogs();
             fetchLeaderboard();
+            checkBeastEncounter();
         }
     }, [session, status]);
 
@@ -508,6 +639,137 @@ export default function GameClient() {
         } catch (e) { toast.error("Lỗi kết nối"); }
     };
 
+    // --- PVP & RAID ---
+    const fetchPvpStatus = async () => {
+        if (!state.user?.id) return;
+        try {
+            // Fetch protection status
+            const resProt = await fetch(`${API_URL}/game/pvp/protection?userId=${state.user.id}`);
+            const dataProt = await resProt.json();
+            setProtection(dataProt);
+
+            // Fetch raid history
+            const resLogs = await fetch(`${API_URL}/game/pvp/raid-history?userId=${state.user.id}`);
+            const dataLogs = await resLogs.json();
+            if (dataLogs.raids) setRaidLogs(dataLogs.raids);
+        } catch (e) {
+            console.error("Fetch PVP Error", e);
+        }
+    };
+
+    const handleRaid = async (victimId: string) => {
+        try {
+            if (!victimId) return;
+            const res = await fetch(`${API_URL}/game/pvp/raid`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ attackerId: state.user.id, victimId })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                toast({
+                    title: data.success ? "⚔️ Đánh Cướp Thành Công!" : "🛡️ Đánh Cướp Thất Bại!",
+                    description: data.message,
+                    variant: data.success ? "default" : "destructive",
+                });
+                fetchGameState(); // Update gold
+                fetchPvpStatus(); // Update logs
+            } else {
+                toast({
+                    title: "Lỗi",
+                    description: data.error,
+                    variant: "destructive"
+                });
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    // --- ARENA ---
+    const fetchArenaStatus = async () => {
+        if (!state.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/arena/history?userId=${state.user.id}`);
+            const data = await res.json();
+            if (data.battles) setArenaBattles(data.battles);
+
+            // Fetch tier
+            const resTier = await fetch(`${API_URL}/game/ranking/my-tier?userId=${state.user.id}`);
+            const dataTier = await resTier.json();
+            setMyTier(dataTier);
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const findArenaMatch = async () => {
+        try {
+            setArenaOpponent(null);
+            setArenaResult(null);
+            setArenaBattleLog([]);
+
+            const res = await fetch(`${API_URL}/game/arena/find-match`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: state.user.id })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                setArenaOpponent(data.opponent);
+                setArenaModalOpen(true);
+            } else {
+                toast({ title: "Không tìm thấy đối thủ", description: data.error, variant: "destructive" });
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const startArenaBattle = async () => {
+        if (!arenaOpponent) return;
+        try {
+            const res = await fetch(`${API_URL}/game/arena/battle`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ player1Id: state.user.id, player2Id: arenaOpponent.id })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                // Animate battle log
+                let roundIndex = 0;
+                const interval = setInterval(() => {
+                    if (roundIndex < data.battleLog.length) {
+                        setArenaBattleLog(prev => [...prev, data.battleLog[roundIndex]]);
+                        roundIndex++;
+                    } else {
+                        clearInterval(interval);
+                        setArenaResult(data); // Show result
+                        fetchGameState(); // Update rewards
+                        fetchArenaStatus(); // Update history
+                    }
+                }, 800); // 0.8s per round
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'SECT' && state.user?.id) {
+            fetchMySect();
+            fetchSects();
+        }
+        if (activeTab === 'PVP' && state.user?.id) {
+            fetchPvpStatus();
+            fetchArenaStatus();
+        }
+    }, [activeTab, state.user?.id]);
+
+
     if (status === "loading" || (loading && status === "authenticated")) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] bg-slate-50">
@@ -516,6 +778,7 @@ export default function GameClient() {
             </div>
         );
     }
+
 
     if (status === "unauthenticated" || !session) {
         return (
@@ -949,8 +1212,21 @@ export default function GameClient() {
                                                 const mission = missions.find(m => m.id === um.missionId);
                                                 if (!mission) return null;
 
-                                                const userItem = state.inventory.find(inv => inv.itemId === mission.requiredItemId);
-                                                const canComplete = userItem && userItem.quantity >= (mission.requiredQuantity || 1);
+                                                let canComplete = false;
+                                                let progressText = "";
+
+                                                if (mission.type === 'COLLECT') {
+                                                    const userItem = state.inventory.find(inv => inv.itemId === mission.requiredItemId);
+                                                    const current = userItem?.quantity || 0;
+                                                    const required = mission.requiredQuantity || 1;
+                                                    canComplete = current >= required;
+                                                    progressText = `Vật phẩm: ${current}/${required}`;
+                                                } else if (mission.type === 'PROGRESS' || mission.type === 'SYSTEM') {
+                                                    const current = um.progress || 0;
+                                                    const required = mission.requiredQuantity || 1; // Mapped from requiredCount in seeding
+                                                    canComplete = current >= required;
+                                                    progressText = `Tiến độ: ${current}/${required}`;
+                                                }
 
                                                 return (
                                                     <div key={um.id} className="border border-orange-200 bg-orange-50/30 rounded-lg p-4">
@@ -961,10 +1237,14 @@ export default function GameClient() {
                                                             </div>
                                                             {canComplete && <Check className="w-5 h-5 text-green-600" />}
                                                         </div>
-                                                        <div className="text-xs text-slate-700 bg-white/50 p-2 rounded mb-2">
-                                                            Yêu cầu: <span className="font-mono">{mission.requiredQuantity} {mission.requiredItemId}</span>
-                                                            <br />
-                                                            Hiện có: <span className={`font-mono ${canComplete ? 'text-green-600' : 'text-red-600'}`}>{userItem?.quantity || 0}</span>
+                                                        <div className="text-xs text-slate-700 bg-white/50 p-2 rounded mb-2 font-mono">
+                                                            {progressText}
+                                                            {/* Show Item Name if Collect */}
+                                                            {mission.type === 'COLLECT' && mission.requiredItemId && (
+                                                                <span className="block text-[10px] text-slate-500">
+                                                                    ({state.itemsDef?.[mission.requiredItemId]?.name || mission.requiredItemId})
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <div className="text-xs text-slate-600 bg-yellow-50 p-2 rounded mb-3">
                                                             Thưởng: <span className="text-yellow-600 font-bold">{mission.rewardGold} Vàng</span> + <span className="text-blue-600 font-bold">{mission.rewardExp} Exp</span>
@@ -975,7 +1255,7 @@ export default function GameClient() {
                                                             disabled={!canComplete}
                                                             onClick={() => completeMission(mission.id)}
                                                         >
-                                                            {canComplete ? "✅ Nộp Nhiệm Vụ" : "⏳ Chưa đủ vật phẩm"}
+                                                            {canComplete ? "✅ Nộp Nhiệm Vụ" : "⏳ Đang thực hiện"}
                                                         </Button>
                                                     </div>
                                                 );
@@ -1179,8 +1459,320 @@ export default function GameClient() {
                             )}
                         </div>
                     )}
+
+                    {/* PVP Tab */}
+                    {activeTab === 'PVP' && (
+                        <div className="space-y-6">
+                            <div className="flex gap-2 border-b border-slate-200 pb-2">
+                                <Button
+                                    size="sm"
+                                    variant={pvpSubTab === 'RAID' ? 'default' : 'ghost'}
+                                    onClick={() => setPvpSubTab('RAID')}
+                                    className={pvpSubTab === 'RAID' ? 'bg-red-600 text-white' : 'text-slate-600'}
+                                >
+                                    🏴‍☠️ Đánh Cướp
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant={pvpSubTab === 'ARENA' ? 'default' : 'ghost'}
+                                    onClick={() => setPvpSubTab('ARENA')}
+                                    className={pvpSubTab === 'ARENA' ? 'bg-orange-600 text-white' : 'text-slate-600'}
+                                >
+                                    ⚔️ Lôi Đài
+                                </Button>
+                            </div>
+
+                            {/* RAID SUB-TAB */}
+                            {pvpSubTab === 'RAID' && (
+                                <div className="space-y-6">
+                                    {/* Protection Status */}
+                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 flex justify-between items-center">
+                                        <div>
+                                            <div className="font-bold text-blue-800 flex items-center gap-2">
+                                                🛡️ Hộ Thể Kim Quang
+                                            </div>
+                                            <div className="text-sm text-blue-600">
+                                                {protection?.protectedUntil ? (
+                                                    `Đang được bảo vệ đến ${new Date(protection.protectedUntil).toLocaleString()}`
+                                                ) : (
+                                                    "Bạn chưa có bảo hộ. Có thể bị tấn công bất cứ lúc nào!"
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="text-right text-xs">
+                                            <div className="font-bold">Lượt cướp còn lại: {3 - (protection?.raidsToday || 0)}/3</div>
+                                            <div className="text-slate-500">Hồi phục lúc 00:00</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Raid Action */}
+                                    <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                        <h4 className="font-bold text-slate-700 mb-3">Tìm Mục Tiêu</h4>
+                                        <div className="flex gap-2">
+                                            <input id="raidTargetId" type="text" placeholder="Nhập ID người chơi..." className="flex-1 border rounded p-2 text-sm" />
+                                            <Button variant="destructive" onClick={() => {
+                                                const target = (document.getElementById('raidTargetId') as HTMLInputElement).value;
+                                                handleRaid(target);
+                                            }}>Cướp!</Button>
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-2 italic">* Cướp sẽ tốn 1000 vàng và có tỷ lệ thất bại nếu đối phương mạnh hơn.</p>
+                                    </div>
+
+                                    {/* Raid History */}
+                                    <div>
+                                        <h4 className="font-bold text-slate-700 mb-3">Lịch Sử Cướp Bóc</h4>
+                                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                            {raidLogs?.map(log => (
+                                                <div key={log.id} className={`p-3 rounded border text-sm flex justify-between items-center ${log.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                                                    <div>
+                                                        <span className="font-bold">{log.attackerId === state.user.id ? 'Bạn tấn công' : 'Bị tấn công bởi'}</span>
+                                                        <span className="mx-1 text-slate-500">{log.attackerId === state.user.id ? log.victimId : log.attackerId}</span>
+                                                    </div>
+                                                    <div className="font-bold">
+                                                        {log.success ? <span className="text-green-600">+{log.goldStolen} Gold</span> : <span className="text-red-500">Thất bại</span>}
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400">
+                                                        {new Date(log.createdAt).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ARENA SUB-TAB */}
+                            {pvpSubTab === 'ARENA' && (
+                                <div className="space-y-6">
+                                    {/* My Rank Info */}
+                                    <div className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-6 rounded-xl shadow-lg flex justify-between items-center">
+                                        <div>
+                                            <div className="text-sm opacity-90">Hạng Hiện Tại</div>
+                                            <div className="text-3xl font-bold flex items-center gap-2">
+                                                {myTier?.currentTier?.icon} {myTier?.currentTier?.tier}
+                                            </div>
+                                            <div className="text-xs mt-1 bg-white/20 px-2 py-1 rounded inline-block">
+                                                Điểm: {myTier?.currentTier?.currentPoints || 0}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-2xl font-bold">{myTier?.seasonWins || 0}</div>
+                                            <div className="text-xs opacity-80">Trận Thắng Mùa Này</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Find Match */}
+                                    <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+                                        <div className="text-4xl mb-4">⚔️</div>
+                                        <h3 className="text-xl font-bold text-slate-700 mb-2">Lôi Đài Tranh Bá</h3>
+                                        <p className="text-slate-500 mb-6 max-w-sm mx-auto">Tìm đối thủ có sức mạnh tương đương để so tài. Chiến thắng nhận Vàng, EXP và Điểm Xếp Hạng.</p>
+                                        <Button size="lg" className="bg-orange-600 hover:bg-orange-700 font-bold px-8 shadow-lg shadow-orange-200" onClick={findArenaMatch}>
+                                            Tìm Đối Thủ
+                                        </Button>
+                                    </div>
+
+                                    {/* Battle History */}
+                                    <div>
+                                        <h4 className="font-bold text-slate-700 mb-3">Lịch Sử Đấu Trường</h4>
+                                        <div className="space-y-2">
+                                            {arenaBattles.map(battle => {
+                                                const isWinner = battle.winnerId === state.user.id;
+                                                return (
+                                                    <div key={battle.id} className={`p-3 rounded flex justify-between items-center border ${isWinner ? 'bg-yellow-50 border-yellow-200' : 'bg-slate-50 border-slate-200'}`}>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="text-xl">{isWinner ? '🏆' : '💀'}</div>
+                                                            <div>
+                                                                <div className="font-bold text-sm">{isWinner ? 'Chiến Thắng' : 'Thất Bại'}</div>
+                                                                <div className="text-[10px] text-slate-500">vs {battle.player1Id === state.user.id ? battle.player2Id : battle.player1Id}</div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className={`font-bold text-sm ${isWinner ? 'text-green-600' : 'text-slate-500'}`}>
+                                                                {isWinner ? '+' : ''}{battle.player1Id === state.user.id ? battle.player1Reward : battle.player2Reward} Vàng
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-400">{new Date(battle.createdAt).toLocaleDateString()}</div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Leaderboard Tab */}
+                    {activeTab === 'LEADERBOARD' && (
+                        <div className="space-y-6">
+                            <div className="text-center py-10 bg-white rounded-lg shadow-sm border border-slate-100">
+                                <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4 animate-bounce" />
+                                <h2 className="text-2xl font-bold text-slate-800 mb-2">Bảng Phong Thần</h2>
+                                <p className="text-slate-500">Tính năng đang được cập nhật...</p>
+                                <div className="mt-8 flex justify-center gap-4">
+                                    <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 w-32">
+                                        <div className="text-2xl">🥇</div>
+                                        <div className="font-bold text-sm mt-1">Hạng 1</div>
+                                        <div className="text-xs text-slate-400">Trống</div>
+                                    </div>
+                                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 w-32">
+                                        <div className="text-2xl">🥈</div>
+                                        <div className="font-bold text-sm mt-1">Hạng 2</div>
+                                        <div className="text-xs text-slate-400">Trống</div>
+                                    </div>
+                                    <div className="bg-orange-50 p-4 rounded-lg border border-orange-100 w-32">
+                                        <div className="text-2xl">🥉</div>
+                                        <div className="font-bold text-sm mt-1">Hạng 3</div>
+                                        <div className="text-xs text-slate-400">Trống</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Arena Modal */}
+                    {arenaModalOpen && arenaOpponent && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm" onClick={() => !arenaBattleLog.length && setArenaModalOpen(false)}>
+                            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full relative overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+                                {/* Header */}
+                                <div className="bg-slate-900 text-white p-4 flex justify-center items-center relative">
+                                    <h3 className="text-xl font-bold text-orange-400">Sàn Đấu Sinh Tử</h3>
+                                    {!arenaResult && (
+                                        <button onClick={() => setArenaModalOpen(false)} className="absolute right-4 text-slate-400 hover:text-white">✕</button>
+                                    )}
+                                </div>
+
+                                {/* Body */}
+                                <div className="p-6 flex-1 overflow-y-auto">
+                                    {!arenaResult && arenaBattleLog.length === 0 ? (
+                                        // Match Found View
+                                        <div className="text-center py-8">
+                                            <div className="text-6xl mb-6">🆚</div>
+                                            <h4 className="text-2xl font-bold text-slate-800 mb-2">Đã Tìm Thấy Đối Thủ!</h4>
+                                            <div className="bg-slate-100 p-4 rounded-lg inline-block min-w-[200px] mb-8">
+                                                <div className="font-bold text-lg text-indigo-700">{arenaOpponent.name}</div>
+                                                <div className="text-sm text-slate-500">Tu vi: {arenaOpponent.cultivationExp} EXP</div>
+                                            </div>
+
+                                            <div className="flex justify-center gap-4">
+                                                <Button variant="outline" onClick={() => setArenaModalOpen(false)}>Bỏ Qua</Button>
+                                                <Button size="lg" className="bg-red-600 hover:bg-red-700 font-bold animate-pulse" onClick={startArenaBattle}>
+                                                    ⚔️ BẮT ĐẦU CHIẾN ĐẤU
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        // Battle Log View
+                                        <div className="space-y-4">
+                                            <div className="space-y-2 font-mono text-sm max-h-[300px] overflow-y-auto bg-slate-900 text-green-400 p-4 rounded-lg">
+                                                {arenaBattleLog.map((log, idx) => (
+                                                    <div key={idx} className="border-b border-white/10 pb-1 mb-1 last:border-0">
+                                                        <span className="text-yellow-500">[Hiệp {log.turn}]</span>
+                                                        <span className="text-blue-400"> Bạn</span> gây {log.p1Damage} st,
+                                                        <span className="text-red-400"> Địch</span> gây {log.p2Damage} st.
+                                                        <div className="text-slate-500 text-xs text-right">HP: {log.p1HP} vs {log.p2HP}</div>
+                                                    </div>
+                                                ))}
+                                                {arenaResult && (
+                                                    <div className="pt-2 text-center font-bold text-yellow-400 text-lg border-t border-white/20 mt-4">
+                                                        KẾT THÚC TRẬN ĐẤU
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {arenaResult && (
+                                                <div className="text-center animate-in zoom-in duration-500">
+                                                    <div className="text-6xl mb-4">{arenaResult.winnerId === state.user.id ? '🏆' : '💀'}</div>
+                                                    <h3 className={`text-3xl font-bold mb-2 ${arenaResult.winnerId === state.user.id ? 'text-yellow-600' : 'text-slate-600'}`}>
+                                                        {arenaResult.winnerId === state.user.id ? 'CHIẾN THẮNG VINH QUANG!' : 'THẤT BẠI THẢM HẠI'}
+                                                    </h3>
+
+                                                    <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 inline-block w-full max-w-sm mx-auto">
+                                                        <div className="grid grid-cols-3 gap-2 text-center">
+                                                            <div>
+                                                                <div className="text-xs text-slate-500">Vàng</div>
+                                                                <div className="font-bold text-yellow-600">+{arenaResult.rewards.winner.gold}</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-xs text-slate-500">EXP</div>
+                                                                <div className="font-bold text-blue-600">+{arenaResult.rewards.winner.exp}</div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-xs text-slate-500">Điểm</div>
+                                                                <div className="font-bold text-orange-600">+{arenaResult.rewards.winner.points}</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-6">
+                                                        <Button size="lg" onClick={() => setArenaModalOpen(false)}>Đóng</Button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
+
+            {/* Beast Encounter Modal */}
+            {beastEncounter && beastModalOpen && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => { }}>
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative" onClick={(e) => e.stopPropagation()}>
+                        {/* Beast Info */}
+                        <div className="text-center mb-6">
+                            <div className="text-6xl mb-3">{beastEncounter.beast.icon || '👾'}</div>
+                            <h2 className="text-2xl font-bold text-red-600">{beastEncounter.beast.name}</h2>
+                            <p className="text-sm text-slate-600 mt-1">{beastEncounter.beast.description}</p>
+                        </div>
+
+                        {/* Health Bar */}
+                        <div className="mb-6">
+                            <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                <span>Máu quái</span>
+                                <span>{beastEncounter.encounter.beastHealth} / {beastEncounter.beast.health}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                <div
+                                    className="bg-red-500 h-full transition-all"
+                                    style={{ width: `${(beastEncounter.encounter.beastHealth / beastEncounter.beast.health) * 100}%` }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Stats */}
+                        <div className="grid grid-cols-2 gap-3 mb-6">
+                            <div className="bg-red-50 p-3 rounded-lg border border-red-100">
+                                <div className="text-xs text-slate-500 font-medium">Tấn công</div>
+                                <div className="text-lg font-bold text-red-600">{beastEncounter.beast.attack}</div>
+                            </div>
+                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                <div className="text-xs text-slate-500 font-medium">Phòng thủ</div>
+                                <div className="text-lg font-bold text-blue-600">{beastEncounter.beast.defense}</div>
+                            </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-3">
+                            <Button
+                                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold"
+                                onClick={attackBeast}
+                            >
+                                ⚔️ Tấn Công
+                            </Button>
+                            <Button
+                                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white"
+                                onClick={fleeBeast}
+                            >
+                                🏃 Trốn Thoát
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

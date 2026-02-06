@@ -6,12 +6,12 @@ export const ITEM_TYPES = {
 
 export const ITEMS: Record<string, { id: string, name: string, type: string, price?: number, growTime?: number, exp?: number, sellPrice?: number, description?: string }> = {
     // Seeds
-    'seed_linh_thao': { id: 'seed_linh_thao', name: 'Hạt Linh Thảo', type: ITEM_TYPES.SEED, price: 10, growTime: 60 }, // 60s for testing
-    'seed_nhan_sam': { id: 'seed_nhan_sam', name: 'Hạt Nhân Sâm', type: ITEM_TYPES.SEED, price: 50, growTime: 300 },
+    'seed_linh_thao': { id: 'seed_linh_thao', name: 'Hạt Linh Thảo', type: ITEM_TYPES.SEED, price: 10, growTime: 300 }, // 5 mins
+    'seed_nhan_sam': { id: 'seed_nhan_sam', name: 'Hạt Nhân Sâm', type: ITEM_TYPES.SEED, price: 50, growTime: 1800 }, // 30 mins
 
     // Products
-    'herb_linh_thao': { id: 'herb_linh_thao', name: 'Linh Thảo', type: ITEM_TYPES.PRODUCT, sellPrice: 5, exp: 5 },
-    'herb_nhan_sam': { id: 'herb_nhan_sam', name: 'Nhân Sâm', type: ITEM_TYPES.PRODUCT, sellPrice: 20, exp: 30 },
+    'herb_linh_thao': { id: 'herb_linh_thao', name: 'Linh Thảo', type: ITEM_TYPES.PRODUCT, sellPrice: 15, exp: 5 }, // Profit 50%
+    'herb_nhan_sam': { id: 'herb_nhan_sam', name: 'Nhân Sâm', type: ITEM_TYPES.PRODUCT, sellPrice: 80, exp: 30 }, // Profit 60%
 
     // Pills
     'pill_truc_co': { id: 'pill_truc_co', name: 'Trúc Cơ Đan', type: ITEM_TYPES.CONSUMABLE, price: 1000, exp: 500, sellPrice: 200 },
@@ -45,6 +45,7 @@ export const PLOT_UNLOCK_COSTS: Record<number, number> = {
 export const WATER_CONFIG = {
     REDUCTION_PERCENT: 0.1, // 10% reduction per water
     MAX_WATER_PER_CROP: 3,
+    COOLDOWN_MS: 15 * 60 * 1000, // 15 Minutes
 };
 
 export const CULTIVATION_LEVELS = [
@@ -54,4 +55,104 @@ export const CULTIVATION_LEVELS = [
     { name: 'Kim Đan', exp: 5000, breakthroughChance: 0.5 }, // To Nguyên Anh
     { name: 'Nguyên Anh', exp: 20000, breakthroughChance: 0.3 }, // To Hóa Thần
     { name: 'Hóa Thần', exp: 100000, breakthroughChance: 0.1 }, // To Luyện Hư
+];
+
+export const DAILY_MISSIONS = [
+    {
+        id: 'mission_daily_login',
+        title: 'Điểm Danh',
+        description: 'Đăng nhập vào game',
+        type: 'SYSTEM',
+        rewardGold: 20,
+        rewardExp: 0
+    },
+    {
+        id: 'mission_daily_water',
+        title: 'Nông Dân Chăm Chỉ',
+        description: 'Tưới nước cho cây 5 lần',
+        type: 'PROGRESS',
+        requiredAction: 'WATER',
+        requiredCount: 5,
+        rewardGold: 50,
+        rewardExp: 10
+    },
+    {
+        id: 'mission_daily_harvest',
+        title: 'Thu Hoạch Vụ Mùa',
+        description: 'Thu hoạch 10 cây bất kỳ',
+        type: 'PROGRESS',
+        requiredAction: 'HARVEST',
+        requiredCount: 10,
+        rewardGold: 100,
+        rewardExp: 20
+    }
+];
+
+export const BEASTS = [
+    {
+        id: 'beast_wolf',
+        name: 'Sói Hoang',
+        description: 'Đàn sói hung dữ xuất hiện trong rừng sâu',
+        health: 100,
+        attack: 15,
+        defense: 5,
+        icon: '🐺',
+        lootTable: [
+            { itemId: 'herb_linh_thao', quantity: 3, chance: 0.7 },
+            { itemId: 'seed_linh_chi', quantity: 1, chance: 0.3 }
+        ]
+    },
+    {
+        id: 'beast_tiger',
+        name: 'Hổ Núi',
+        description: 'Hổ núi cấp trung, rất nguy hiểm',
+        health: 250,
+        attack: 30,
+        defense: 10,
+        icon: '🐯',
+        lootTable: [
+            { itemId: 'pill_basic', quantity: 2, chance: 0.6 },
+            { itemId: 'herb_linh_thao', quantity: 5, chance: 0.5 }
+        ]
+    },
+    {
+        id: 'beast_dragon',
+        name: 'Giao Long',
+        description: 'Rồng giao huyền thoại, cực kỳ mạnh mẽ',
+        health: 500,
+        attack: 50,
+        defense: 20,
+        icon: '🐲',
+        lootTable: [
+            { itemId: 'pill_rare', quantity: 1, chance: 0.8 },
+            { itemId: 'item_array_basic', quantity: 1, chance: 0.4 }
+        ]
+    }
+];
+
+export const RAID_SETTINGS = {
+    DAILY_LIMIT: 3,
+    GOLD_COST: 1000,
+    SUCCESS_CHANCE_BASE: 0.5, // 50% base
+    LEVEL_ADVANTAGE_BONUS: 0.1, // +10% per level difference in attacker's favor
+    STEAL_PERCENTAGE: 0.15, // 15% of victim's gold
+    PROTECTION_COOLDOWN_HOURS: 3
+};
+
+export const ARENA_SETTINGS = {
+    WINNER_POINTS: 50,
+    LOSER_POINTS: -20,
+    WINNER_GOLD: 2000,
+    LOSER_GOLD: 200,
+    WINNER_EXP: 500,
+    LOSER_EXP: 50,
+    MAX_TURNS: 10
+};
+
+export const RANKING_TIERS = [
+    { tier: 'BRONZE', minPoints: 0, icon: '🥉', rewardGold: 1000 },
+    { tier: 'SILVER', minPoints: 1000, icon: '🥈', rewardGold: 5000 },
+    { tier: 'GOLD', minPoints: 3000, icon: '🥇', rewardGold: 15000 },
+    { tier: 'DIAMOND', minPoints: 7000, icon: '💎', rewardGold: 50000 },
+    { tier: 'LEGEND', minPoints: 15000, icon: '👑', rewardGold: 100000 }
 ];

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { eq, and, or, desc } from "drizzle-orm";
 import { db } from "../../../../packages/db/src";
-import { users, farmPlots, inventory, gameItems, gameLogs } from "../../../../packages/db/src";
+import { users, farmPlots, inventory, gameItems, gameLogs, missions } from "../../../../packages/db/src";
 import { ITEM_TYPES, CULTIVATION_LEVELS, PLOT_UNLOCK_COSTS, WATER_CONFIG } from "../data/gameData";
 
 // --- Helpers ---
@@ -55,7 +55,7 @@ const getGameLogsHelper = async (userId: string) => {
 
 // --- Controllers ---
 
-export const getGameState = async (req: Request, res: Response) => {
+const getGameState = async (req: Request, res: Response) => {
     try {
         const { userId } = req.body;
         if (!userId) return res.status(400).json({ error: "User ID required" });
@@ -69,6 +69,40 @@ export const getGameState = async (req: Request, res: Response) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 };
+
+// --- Mission Logic Helpers ---
+const trackMissionProgress = async (userId: string, actionType: string, count: number = 1) => {
+    try {
+        // Direct DB access to avoid circular dependency issues
+        const { userMissions, missions } = await import("../../../../packages/db/src");
+
+        const activeMissions = await db.select({
+            userMission: userMissions,
+            missionDef: missions
+        })
+            .from(userMissions)
+            .innerJoin(missions, eq(userMissions.missionId, missions.id))
+            .where(and(
+                eq(userMissions.userId, userId),
+                eq(userMissions.status, 'IN_PROGRESS'),
+                eq(missions.type, 'PROGRESS')
+            ));
+
+        // 2. Update progress
+        for (const { userMission, missionDef } of activeMissions) {
+            // Dynamic matching based on requiredAction field
+            if (missionDef.requiredAction === actionType) {
+                const newProgress = (userMission.progress || 0) + count;
+                await db.update(userMissions)
+                    .set({ progress: newProgress })
+                    .where(eq(userMissions.id, userMission.id));
+            }
+        }
+    } catch (e) {
+        console.error("Track Progress Error:", e);
+    }
+}
+
 
 export const buyItem = async (req: Request, res: Response) => {
     try {
@@ -290,7 +324,7 @@ export const craftItem = async (req: Request, res: Response) => {
 };
 
 // --- Admin / Seeding ---
-import { ITEMS, RECIPES } from "../data/gameData";
+import { ITEMS, RECIPES, DAILY_MISSIONS } from "../data/gameData";
 
 export const seedGameData = async (req: Request, res: Response) => {
     try {
@@ -331,6 +365,31 @@ export const seedGameData = async (req: Request, res: Response) => {
                     exp: itemDef.exp || 0,
                     description: itemDef.description,
                     ingredients: recipeIngredients
+                }
+            });
+        }
+
+        // Sync Missions
+        for (const mission of DAILY_MISSIONS) {
+            await db.insert(missions).values({
+                id: mission.id,
+                title: mission.title,
+                description: mission.description,
+                type: mission.type,
+                requiredAction: mission.requiredAction || null, // Add requiredAction field
+                rewardGold: mission.rewardGold,
+                rewardExp: mission.rewardExp,
+                requiredQuantity: mission.requiredCount, // Map from config 'requiredCount' to schema 'requiredQuantity'
+            }).onConflictDoUpdate({
+                target: missions.id,
+                set: {
+                    title: mission.title,
+                    description: mission.description,
+                    type: mission.type,
+                    requiredAction: mission.requiredAction || null, // Add requiredAction field
+                    rewardGold: mission.rewardGold,
+                    rewardExp: mission.rewardExp,
+                    requiredQuantity: mission.requiredCount
                 }
             });
         }
@@ -483,6 +542,9 @@ export const harvestPlant = async (req: Request, res: Response) => {
             }
         });
 
+        // Trigger Mission Update (outside transaction to avoid blocking)
+        trackMissionProgress(userId, 'HARVEST', 1);
+
         res.json({ success: true, message: `Thu hoạch thành công: ${productDef.name}` });
 
     } catch (e) {
@@ -542,8 +604,15 @@ export const waterPlant = async (req: Request, res: Response) => {
             return res.status(400).json({ error: "Cây đã đủ nước" });
         }
 
-        // Check Cooldown (Optional Phase 2 feature? Or simple check)
-        // For now: no strict cooldown logic implemented in Phase 1 except max count.
+        // Check Cooldown
+        if (plot.lastWateredAt) {
+            const now = Date.now();
+            const elapsed = now - new Date(plot.lastWateredAt).getTime();
+            if (elapsed < WATER_CONFIG.COOLDOWN_MS) {
+                const remainingMin = Math.ceil((WATER_CONFIG.COOLDOWN_MS - elapsed) / 60000);
+                return res.status(400).json({ error: `Cây đang ướt, hãy đợi ${remainingMin} phút nữa.` });
+            }
+        }
 
         await db.transaction(async (tx) => {
             await tx.update(farmPlots)
@@ -565,6 +634,9 @@ export const waterPlant = async (req: Request, res: Response) => {
                 createdAt: new Date()
             });
         });
+
+        // Trigger Mission Update
+        trackMissionProgress(userId, 'WATER', 1);
 
         res.json({ success: true, message: "Đã tưới nước! Cây lớn nhanh hơn chút." });
     } catch (e) {

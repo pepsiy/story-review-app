@@ -427,6 +427,48 @@ export async function processBatchBackground(jobId: number, count: number, workT
                 console.log(`✅ Chunk ${chunkTitle} completed & Saved to Chapters`);
                 emitLog(`✅ Chunk ${chunkTitle} Summarized & Saved!`, 'success', jobId);
 
+                // --- PVE BEAST SPAWNING FROM GAME TAGS ---
+                if (gameEvents && Array.isArray(gameEvents) && gameEvents.length > 0) {
+                    console.log(`🎮 [Beast Spawn] Detected game events:`, gameEvents);
+
+                    // Check for BEAST_* tags
+                    for (const tag of gameEvents) {
+                        let beastId: string | null = null;
+
+                        if (tag === 'BEAST_WOLF') beastId = 'beast_wolf';
+                        else if (tag === 'BEAST_TIGER') beastId = 'beast_tiger';
+                        else if (tag === 'BEAST_DRAGON') beastId = 'beast_dragon';
+
+                        if (beastId) {
+                            console.log(`🐉 [Beast Spawn] Triggering spawn for: ${beastId}`);
+
+                            // Spawn beast for all active users (or just users who are reading this work)
+                            // For now, we'll spawn for all users who have game state
+                            try {
+                                const { spawnBeast } = await import('./beastController');
+                                const { users } = await import('../../../../packages/db/src');
+
+                                // Get all users with gold > 0 (indication they've started playing)
+                                const activeUsers = await db.select({ id: users.id })
+                                    .from(users)
+                                    .where(sql`${users.gold} > 0`)
+                                    .limit(100); // Limit to prevent mass spawning
+
+                                for (const user of activeUsers) {
+                                    const result = await spawnBeast(user.id, beastId);
+                                    if (result.success) {
+                                        console.log(`✅ Spawned ${beastId} for user ${user.id}`);
+                                    }
+                                }
+
+                                emitLog(`🐉 Spawned ${beastId} for ${activeUsers.length} users!`, 'success', jobId);
+                            } catch (error: any) {
+                                console.error(`❌ Error spawning beast ${beastId}:`, error.message);
+                            }
+                        }
+                    }
+                }
+
             } catch (error: any) {
                 console.error(`❌ Error processing chunk ${chunkTitle}:`, error.message);
                 emitLog(`❌ Failed Chunk ${chunkTitle}: ${error.message}`, 'error', jobId);

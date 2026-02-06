@@ -11,7 +11,7 @@ import {
     waterPlant,
     getLogs,
     attemptBreakthrough,
-    getLeaderboard,
+    getLeaderboard as getBasicLeaderboard,
     syncStoryEvent
 } from "../controllers/gameController";
 
@@ -38,7 +38,7 @@ router.get("/logs", getLogs);
 
 // Phase 2: Retention (Breakthrough & Leaderboard)
 router.post("/breakthrough", attemptBreakthrough);
-router.get("/leaderboard", getLeaderboard);
+router.get("/leaderboard", getBasicLeaderboard);
 
 // Mission Routes
 router.post("/missions", getMissions);
@@ -63,6 +63,29 @@ router.post("/event/sync", syncStoryEvent);
 // Phase 6: Social Protection
 import { setupProtection } from "../controllers/socialController";
 router.post("/social/protect", setupProtection);
+
+// Phase 21: Beast Encounters (PVE)
+import { getActiveEncounter, attackBeast, fleeBeast } from "../controllers/beastController";
+router.post("/beast/current", getActiveEncounter);
+router.post("/beast/attack", attackBeast);
+router.post("/beast/flee", fleeBeast);
+
+// Phase 22: PVP Raids
+import { initiateRaid, getRaidHistory, getProtectionStatus } from "../controllers/pvpController";
+router.post("/pvp/raid", initiateRaid);
+router.get("/pvp/raid-history", getRaidHistory);
+router.get("/pvp/protection", getProtectionStatus);
+
+// Phase 23: Arena Combat
+import { findArenaMatch, startArenaBattle, getArenaHistory } from "../controllers/arenaController";
+router.post("/arena/find-match", findArenaMatch);
+router.post("/arena/battle", startArenaBattle);
+router.get("/arena/history", getArenaHistory);
+
+// Phase 24: Ranking
+import { getLeaderboard, getMyTier } from "../controllers/rankingController";
+router.get("/ranking/leaderboard", getLeaderboard);
+router.get("/ranking/my-tier", getMyTier);
 
 // Admin / Seed
 import { seedGameData } from "../controllers/gameController";
