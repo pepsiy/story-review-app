@@ -641,7 +641,7 @@ export default function GameClient() {
 
     // --- PVP & RAID ---
     const fetchPvpStatus = async () => {
-        if (!state.user?.id) return;
+        if (!state?.user?.id) return;
         try {
             // Fetch protection status
             const resProt = await fetch(`${API_URL}/game/pvp/protection?userId=${state.user.id}`);
@@ -663,7 +663,7 @@ export default function GameClient() {
             const res = await fetch(`${API_URL}/game/pvp/raid`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ attackerId: state.user.id, victimId })
+                body: JSON.stringify({ attackerId: state?.user?.id, victimId })
             });
             const data = await res.json();
 
@@ -689,7 +689,7 @@ export default function GameClient() {
 
     // --- ARENA ---
     const fetchArenaStatus = async () => {
-        if (!state.user?.id) return;
+        if (!state?.user?.id) return;
         try {
             const res = await fetch(`${API_URL}/game/arena/history?userId=${state.user.id}`);
             const data = await res.json();
