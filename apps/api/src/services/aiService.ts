@@ -18,8 +18,11 @@ interface KeyUsage {
 
 class KeyManager {
     private keys: Map<string, KeyUsage> = new Map();
-    private readonly RATE_LIMIT_RPM = 60; // Increased for Paid Keys. Let Google 429 handle the real limit.
-    private readonly RATE_LIMIT_RPD = 10000; // Increased significantly.
+    private keyList: string[] = []; // To support Round Robin by index
+    private lastUsedIndex = -1; // Pointer for Round Robin
+
+    private readonly RATE_LIMIT_RPM = 60; // Increased for Paid Keys.
+    private readonly RATE_LIMIT_RPD = 10000;
     private readonly WINDOW_SIZE_MS = 60000; // 1 minute
     private initialized = false;
 
@@ -31,7 +34,7 @@ class KeyManager {
     async initialize() {
         if (this.initialized && this.keys.size > 0) return;
 
-        let keyList: string[] = [];
+        let rawKeyList: string[] = [];
 
         // 1. Try DB
         try {
@@ -39,25 +42,23 @@ class KeyManager {
                 where: eq(systemSettings.key, "GEMINI_API_KEY")
             });
             if (dbKey && dbKey.value) {
-                keyList = dbKey.value.split(",").map(k => k.trim()).filter(k => k.length > 0);
+                rawKeyList = dbKey.value.split(",").map(k => k.trim()).filter(k => k.length > 0);
             }
         } catch (e) {
             console.warn("⚠️ Failed to fetch keys from DB:", e);
         }
 
         // 2. Try Env
-        // Split by comma OR newline to support multi-line env values
         const envKeys = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "")
             .split(/[,\n]+/)
-            .map(k => k.trim().replace(/^['"]|['"]$/g, '')) // Remove quotes if present
+            .map(k => k.trim().replace(/^['"]|['"]$/g, ''))
             .filter(k => k.length > 0 && !k.startsWith("#"));
 
         // Merge unique
-        const allKeys = Array.from(new Set([...keyList, ...envKeys]));
+        const allKeys = Array.from(new Set([...rawKeyList, ...envKeys]));
 
         if (allKeys.length === 0) {
             console.error("❌ No GEMINI_API_KEYS found!");
-            // Instead of throw, we allow init but getAvailableKey will fail
         }
 
         // Initialize state for new keys
@@ -76,12 +77,15 @@ class KeyManager {
             }
         });
 
+        // Re-build keyList for Round Robin
+        this.keyList = Array.from(this.keys.keys());
+
         console.log(`🔐 KeyManager Initialized with ${this.keys.size} keys.`);
         this.initialized = true;
     }
 
     /**
-     * Get the best available key, or wait if necessary.
+     * Get the best available key using Round Robin
      */
     async getAvailableKey(): Promise<string> {
         await this.initialize();
@@ -89,71 +93,74 @@ class KeyManager {
             throw new Error("No GEMINI_API_KEYS configured.");
         }
 
-        while (true) {
+        // --- ROUND ROBIN SELECTION ---
+        const totalKeys = this.keyList.length;
+        let minWaitTime = Infinity;
+
+        // Try to find a key starting from the NEXT index after the last used one.
+        // This ensures we rotate 1 -> 2 -> 3 ... -> 16 -> 1
+        for (let i = 0; i < totalKeys; i++) {
+            const targetIndex = (this.lastUsedIndex + 1 + i) % totalKeys;
+            const keyStr = this.keyList[targetIndex];
+            const usage = this.keys.get(keyStr);
+
+            if (!usage || usage.isDead) continue;
+
             const now = Date.now();
-            let bestKey: string | null = null;
-            let minWaitTime = Infinity;
 
-            // Check each key state
-            for (const [keyStr, usage] of this.keys.entries()) {
-                if (usage.isDead) continue;
-
-                // Check Cooldown
-                if (usage.cooldownUntil > now) {
-                    minWaitTime = Math.min(minWaitTime, usage.cooldownUntil - now);
-                    continue;
-                }
-
-                // Check Daily Limit (Reset if needed)
-                if (now - usage.lastDailyReset > 86400000) { // 24h
-                    usage.totalRequestsToday = 0;
-                    usage.lastDailyReset = now;
-                }
-                if (usage.totalRequestsToday >= this.RATE_LIMIT_RPD) {
-                    // Key exhausted for day - wait for next day? 
-                    // Too long to wait, just skip.
-                    const cooldown = 86400000 - (now - usage.lastDailyReset);
-                    minWaitTime = Math.min(minWaitTime, cooldown);
-                    continue;
-                }
-
-                // Check RPM Window (Reset if needed)
-                if (now - usage.windowStartTime > this.WINDOW_SIZE_MS) {
-                    usage.requestsInCurrentWindow = 0;
-                    usage.windowStartTime = now;
-                }
-
-                if (usage.requestsInCurrentWindow < this.RATE_LIMIT_RPM) {
-                    // Valid key found!
-                    bestKey = keyStr;
-                    break; // Found one, exit loop
-                } else {
-                    // Key busy, calculate wait time for next window
-                    const wait = this.WINDOW_SIZE_MS - (now - usage.windowStartTime);
-                    minWaitTime = Math.min(minWaitTime, wait);
-                }
+            // Check Cooldown
+            if (usage.cooldownUntil > now) {
+                minWaitTime = Math.min(minWaitTime, usage.cooldownUntil - now);
+                continue;
             }
 
-            if (bestKey) {
-                // Record provisional usage
-                const usage = this.keys.get(bestKey)!;
+            // Check Daily Limit (Reset if needed)
+            if (now - usage.lastDailyReset > 86400000) { // 24h
+                usage.totalRequestsToday = 0;
+                usage.lastDailyReset = now;
+            }
+            if (usage.totalRequestsToday >= this.RATE_LIMIT_RPD) {
+                const cooldown = 86400000 - (now - usage.lastDailyReset);
+                minWaitTime = Math.min(minWaitTime, cooldown);
+                continue;
+            }
+
+            // Check RPM Window (Reset if needed)
+            if (now - usage.windowStartTime > this.WINDOW_SIZE_MS) {
+                usage.requestsInCurrentWindow = 0;
+                usage.windowStartTime = now;
+            }
+
+            if (usage.requestsInCurrentWindow < this.RATE_LIMIT_RPM) {
+                // FOUND VALID KEY!
+                // Update Index
+                this.lastUsedIndex = targetIndex;
+
+                // Record Usage
                 usage.requestsInCurrentWindow++;
                 usage.totalRequestsToday++;
-                return bestKey;
+
+                return keyStr;
+            } else {
+                // Key Busy
+                const wait = this.WINDOW_SIZE_MS - (now - usage.windowStartTime);
+                minWaitTime = Math.min(minWaitTime, wait);
             }
-
-            // No key available
-            if (minWaitTime === Infinity) {
-                console.warn("⚠️ All API Keys seem dead or exhausted daily limit.");
-                minWaitTime = 60000; // Default 1m wait
-            }
-
-            // Cap minWaitTime to avoid infinite stuck
-            if (minWaitTime < 100) minWaitTime = 1000;
-
-            console.log(`⏳ All ${this.keys.size} keys busy/cooling. Waiting ${(minWaitTime / 1000).toFixed(1)}s...`);
-            await new Promise(r => setTimeout(r, minWaitTime + 100));
         }
+
+        // If loop finishes without returning, no key is available.
+        if (minWaitTime === Infinity) {
+            console.warn("⚠️ All API Keys seem dead or exhausted daily limit.");
+            minWaitTime = 60000;
+        }
+
+        if (minWaitTime < 100) minWaitTime = 1000;
+
+        console.log(`⏳ All ${this.keys.size} keys busy/cooling. Waiting ${(minWaitTime / 1000).toFixed(1)}s...`);
+        await new Promise(r => setTimeout(r, minWaitTime + 100));
+
+        // Recursively try again after wait
+        return this.getAvailableKey();
     }
 
     /**
@@ -182,18 +189,23 @@ class KeyManager {
         }
         else if (statusCode === 400 || statusCode === 403 || statusCode === 500) {
             // 403 usually means quota exceeded or invalid key. Cool for longer.
+            // 500 is server error, also cool down
             console.warn(`⚠️ Key ...${key.slice(-5)} Error ${statusCode}. Cooling for 5m.`);
             usage.cooldownUntil = Date.now() + 5 * 60 * 1000;
         }
     }
 
     getStats() {
-        return Array.from(this.keys.values()).map(k => ({
-            key: k.key.slice(0, 5) + "...",
-            rpm: `${k.requestsInCurrentWindow}/${this.RATE_LIMIT_RPM}`,
-            today: `${k.totalRequestsToday}/${this.RATE_LIMIT_RPD}`,
-            status: k.isDead ? "DEAD" : (k.cooldownUntil > Date.now() ? `COOLING (${Math.ceil((k.cooldownUntil - Date.now()) / 1000)}s)` : "READY")
-        }));
+        // Sort by index in keyList to show rotation order
+        return this.keyList.map(k => {
+            const usage = this.keys.get(k)!;
+            return {
+                key: usage.key.slice(0, 5) + "...",
+                rpm: `${usage.requestsInCurrentWindow}/${this.RATE_LIMIT_RPM}`,
+                today: `${usage.totalRequestsToday}/${this.RATE_LIMIT_RPD}`,
+                status: usage.isDead ? "DEAD" : (usage.cooldownUntil > Date.now() ? `COOLING (${Math.ceil((usage.cooldownUntil - Date.now()) / 1000)}s)` : "READY")
+            };
+        });
     }
 }
 
@@ -210,10 +222,11 @@ export const generateText = async (prompt: string): Promise<string> => {
     // Explicitly check key count
     const stats = keyManager.getStats();
     const keyCount = stats.length;
-    const MAX_ATTEMPTS = Math.max(5, keyCount);
+    // Allow up to 3 full rotations. If 16 keys * 3 = 48 attempts fail, then something is really wrong.
+    const MAX_ATTEMPTS = Math.max(10, keyCount * 3);
 
     console.log(`[AI-Service] Starting generation. Total Keys Available: ${keyCount}. Max Retries: ${MAX_ATTEMPTS}`);
-    emitLog(`🤖 Start AI Generation. Available Keys: ${keyCount}. Plan to retry up to ${MAX_ATTEMPTS} times.`);
+    emitLog(`🤖 Start AI Generation. Available Keys: ${keyCount}. Plan to retry up to ${MAX_ATTEMPTS} times (3 Loops).`);
 
     while (attempts < MAX_ATTEMPTS) {
         attempts++;
@@ -227,8 +240,9 @@ export const generateText = async (prompt: string): Promise<string> => {
 
             const genAI = new GoogleGenerativeAI(key);
 
-            // Force Model 2.5 Flash
-            const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+            // Start with Gemini 1.5 Flash for high throughput & stability
+            // 2.5 Flash has very low RPM (3-5) on some tiers
+            const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 generationConfig: {
@@ -267,13 +281,16 @@ export const generateText = async (prompt: string): Promise<string> => {
             console.error(`❌ AI Error (Attempt ${attempts}):`, error.message);
             let code = 500;
             if (error.message?.includes("429")) code = 429;
-            // ... code detection ...
+            if (error.status === 403) code = 403;
+            if (error.status === 400) code = 400;
 
             emitLog(`❌ Error with Key ...${key ? key.slice(-5) : 'unknown'}: ${code} (Attempt ${attempts})`, 'error');
 
             if (key) keyManager.reportResult(key, false, code);
 
-            // ... rest of wait logic ...
+            // Don't sleep here, just continue to next attempt (which will use next key)
+            // But wait a tiny bit to prevent tight loop if all keys are bad
+            await new Promise(r => setTimeout(r, 1000));
         }
     }
     throw new Error("Failed to generate text after max retries");
