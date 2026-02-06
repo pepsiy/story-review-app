@@ -423,6 +423,21 @@ export const raidLogs = pgTable('raid_logs', {
     };
 });
 
+// Bảng Raid Protection - Track protection status and daily limits
+export const raidProtection = pgTable('raid_protection', {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull().unique(),
+    protectedUntil: timestamp('protected_until'),
+    raidsToday: integer('raids_today').notNull().default(0),
+    lastRaidDate: timestamp('last_raid_date'),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        userIdx: index('raid_protection_user_idx').on(table.userId),
+    };
+});
+
+
 // Bảng Arena Battles (Phase 23)
 export const arenaBattles = pgTable('arena_battles', {
     id: serial('id').primaryKey(),
