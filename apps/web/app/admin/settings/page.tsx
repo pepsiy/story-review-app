@@ -137,33 +137,35 @@ export default function AdminSettingsPage() {
             <form onSubmit={handleSave} className="space-y-6">
                 {/* Gemini AI Tab */}
                 {activeTab === 'gemini' && (
-                    <div>
-                        <Label htmlFor="geminiKey" className="text-base">Gemini API Key (Google AI)</Label>
-                        <p className="text-sm text-gray-500 mb-2">
-                            Nhập nhiều key cách nhau bởi dấu phẩy (key1, key2) để tự động xoay vòng khi hết quota.
-                        </p>
-                        <Input
-                            id="geminiKey"
-                            value={settings.GEMINI_API_KEY || ''}
-                            onChange={(e) => updateSetting('GEMINI_API_KEY', e.target.value)}
-                            placeholder="AIzaSy..."
-                            className="font-mono text-sm"
-                        />
-                    </div>
+                    <>
+                        <div>
+                            <Label htmlFor="geminiKey" className="text-base">Gemini API Key (Google AI)</Label>
+                            <p className="text-sm text-gray-500 mb-2">
+                                Nhập nhiều key cách nhau bởi dấu phẩy (key1, key2) để tự động xoay vòng khi hết quota.
+                            </p>
+                            <Input
+                                id="geminiKey"
+                                value={settings.GEMINI_API_KEY || ''}
+                                onChange={(e) => updateSetting('GEMINI_API_KEY', e.target.value)}
+                                placeholder="AIzaSy..."
+                                className="font-mono text-sm"
+                            />
+                        </div>
 
-                    <div>
-                        <Label htmlFor="geminiPaidKey" className="text-base text-amber-700">Gemini Paid Keys (Tier 1+)</Label>
-                        <p className="text-sm text-gray-500 mb-2">
-                            Keys trả phí (1000 RPM, 1.5M TPM). Được ưu tiên sử dụng và có hạn mức cao hơn.
-                        </p>
-                        <Input
-                            id="geminiPaidKey"
-                            value={settings.GEMINI_PAID_KEYS || ''}
-                            onChange={(e) => updateSetting('GEMINI_PAID_KEYS', e.target.value)}
-                            placeholder="AIzaSy... (Paid Key)"
-                            className="font-mono text-sm border-amber-200 bg-amber-50"
-                        />
-                    </div>
+                        <div>
+                            <Label htmlFor="geminiPaidKey" className="text-base text-amber-700">Gemini Paid Keys (Tier 1+)</Label>
+                            <p className="text-sm text-gray-500 mb-2">
+                                Keys trả phí (1000 RPM, 1.5M TPM). Được ưu tiên sử dụng và có hạn mức cao hơn.
+                            </p>
+                            <Input
+                                id="geminiPaidKey"
+                                value={settings.GEMINI_PAID_KEYS || ''}
+                                onChange={(e) => updateSetting('GEMINI_PAID_KEYS', e.target.value)}
+                                placeholder="AIzaSy... (Paid Key)"
+                                className="font-mono text-sm border-amber-200 bg-amber-50"
+                            />
+                        </div>
+                    </>
                 )}
 
                 {/* Telegram Tab */}
