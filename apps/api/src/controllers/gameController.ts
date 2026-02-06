@@ -23,7 +23,17 @@ const getUserGameState = async (userId: string) => {
 
     const itemsDef = await db.query.gameItems.findMany();
     const itemsMap = itemsDef.reduce((acc, item) => {
-        acc[item.id] = item;
+        let parsedIngredients = null;
+        if (item.ingredients) {
+            try {
+                parsedIngredients = typeof item.ingredients === 'string'
+                    ? JSON.parse(item.ingredients)
+                    : item.ingredients;
+            } catch (e) {
+                parsedIngredients = [];
+            }
+        }
+        acc[item.id] = { ...item, ingredients: parsedIngredients };
         return acc;
     }, {} as Record<string, any>);
 
