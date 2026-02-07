@@ -210,7 +210,7 @@ class KeyManager {
     /**
      * Report usage result to optimize state
      */
-    reportResult(key: string, success: boolean, statusCode?: number) {
+    public reportResult(key: string, success: boolean, statusCode?: number, forcedRetryMs?: number) {
         const usage = this.keys.get(key);
         if (!usage) return;
 
@@ -220,6 +220,12 @@ class KeyManager {
         }
 
         usage.failedAttempts = (usage.failedAttempts || 0) + 1;
+
+        if (forcedRetryMs && forcedRetryMs > 0) {
+            console.warn(`⏳ Key ...${key.slice(-5)} Explicit Retry-After: ${(forcedRetryMs / 1000).toFixed(2)}s from Google.`);
+            usage.cooldownUntil = Date.now() + forcedRetryMs + 1000; // Add 1s safety buffer
+            return;
+        }
 
         if (statusCode === 429) {
             // Smart Backoff: Differentiate Paid vs Free
@@ -359,7 +365,25 @@ export const generateText = async (prompt: string): Promise<string> => {
 
             emitLog(`❌ Error with Key ...${key ? key.slice(-5) : 'unknown'}: ${code} (Attempt ${attempts})`, 'error');
 
-            if (key) keyManager.reportResult(key, false, code);
+            // Check for explicit retry-after in error message
+            // Pattern 1: "Please retry in 46.902711642s"
+            // Pattern 2: "retryDelay":"46s"
+            let retryMs = 0;
+            const match1 = error.message?.match(/Please retry in ([\d\.]+)s/);
+            if (match1 && match1[1]) {
+                retryMs = Math.ceil(parseFloat(match1[1]) * 1000);
+            }
+            // Fallback: check raw error object for retryDelay
+            if (!retryMs) {
+                try {
+                    const match2 = JSON.stringify(error).match(/"retryDelay"\s*:\s*"(\d+(\.\d+)?)s"/);
+                    if (match2 && match2[1]) {
+                        retryMs = Math.ceil(parseFloat(match2[1]) * 1000);
+                    }
+                } catch (e) { }
+            }
+
+            if (key) keyManager.reportResult(key, false, code, retryMs);
 
             // Don't sleep here, just continue to next attempt (which will use next key)
             // But wait a tiny bit to prevent tight loop if all keys are bad
