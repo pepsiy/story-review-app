@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from "../../../../packages/db/src";
 import { users, inventory } from "../../../../packages/db/src";
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { STORIES, StoryStep } from '../data/storyData';
 
 export const getStoryProgress = async (req: Request, res: Response) => {
@@ -25,7 +25,6 @@ export const getStoryProgress = async (req: Request, res: Response) => {
 
         const currentStep = chapter.steps[stepIndex];
 
-        // If step index exceeds steps, maybe chapter complete?
         if (!currentStep) {
             return res.json({
                 success: true,
@@ -69,49 +68,34 @@ export const advanceStory = async (req: Request, res: Response) => {
         const currentStep = chapter.steps[stepIndex];
         if (!currentStep) return res.json({ success: false, message: 'No step found' });
 
-        // Validate Requirements
-        // For COMBAT type, typically we'd check if specific monster killed recently?
-        // Or we just allow 'advance' if user clicks 'I did it' -> Server verifies log?
-        // For simplicity in prototype:
-        // - DIALOGUE/REWARD: Autoadvance allowed.
-        // - COMBAT: We might cheat and allow auto-advance for now OR checking strict logic later.
-        // Let's implement Rewards logic here.
-
         let rewardsReceived = null;
 
         if (currentStep.rewards) {
-            // Give Rewards
             const { gold, exp, items } = currentStep.rewards;
             let updateData: any = {};
             if (gold) updateData.gold = (user.gold || 0) + gold;
             if (exp) updateData.cultivationExp = (user.cultivationExp || 0) + exp;
 
-            await db.update(users).set(updateData).where(eq(users.id, userId));
+            if (Object.keys(updateData).length > 0) {
+                await db.update(users).set(updateData).where(eq(users.id, userId));
+            }
 
             if (items) {
-                // Add items logic (Simplified)
                 for (const item of items) {
-                    await db.insert(inventory).values({
-                        userId,
-                        itemId: item.itemId,
-                        quantity: item.quantity,
-                        type: 'ITEM', // or lookup
-                        isEquipped: false
-                    }).onConflictDoUpdate({
-                        target: [inventory.userId, inventory.itemId],
-                        set: { quantity: db.raw(`inventory.quantity + ${item.quantity}`) } // Fix raw usage if needed
-                    });
-                    // Actually raw might need import. Let's use simplified logic if raw fails type check.
-                    // Re-doing simple check-insert for safety in prototype without raw import complexity.
-                    const invItem = await db.query.inventory.findFirst({
+                    const existingItem = await db.query.inventory.findFirst({
                         where: and(eq(inventory.userId, userId), eq(inventory.itemId, item.itemId))
                     });
-                    if (invItem) {
-                        await db.update(inventory).set({ quantity: invItem.quantity + item.quantity })
-                            .where(eq(inventory.id, invItem.id));
+
+                    if (existingItem) {
+                        await db.update(inventory)
+                            .set({ quantity: existingItem.quantity + item.quantity })
+                            .where(eq(inventory.id, existingItem.id));
                     } else {
                         await db.insert(inventory).values({
-                            userId, itemId: item.itemId, quantity: item.quantity, type: 'ITEM'
+                            userId,
+                            itemId: item.itemId,
+                            quantity: item.quantity,
+                            type: 'ITEM'
                         });
                     }
                 }
@@ -119,11 +103,10 @@ export const advanceStory = async (req: Request, res: Response) => {
             rewardsReceived = currentStep.rewards;
         }
 
-        // Advance Ptr
         const nextStepIndex = stepIndex + 1;
 
         await db.update(users)
-            .set({ storyStep: nextStepIndex })
+            .set({ storyStep: nextStepIndex } as any)
             .where(eq(users.id, userId));
 
         return res.json({
@@ -138,5 +121,3 @@ export const advanceStory = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Internal Server Error' });
     }
 };
-
-
