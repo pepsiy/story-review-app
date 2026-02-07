@@ -39,8 +39,19 @@ export function AFKCombatOverlay({ userId, mapId, onComplete }: AFKCombatOverlay
     useEffect(() => {
         const pollProgress = async () => {
             try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-                const res = await fetch(`${API_URL}/game/training/realtime-progress?userId=${userId}`);
+                const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+                const API_URL = baseUrl.replace(/\/$/, ""); // Remove trailing slash if present
+                const fullUrl = `${API_URL}/game/training/realtime-progress?userId=${userId}`;
+                // console.log("Fetching AFK progress:", fullUrl); // Debug log
+
+                const res = await fetch(fullUrl);
+
+                if (!res.ok) {
+                    const text = await res.text();
+                    console.error(`AFK Overlay Error: ${res.status} ${res.statusText}`, text);
+                    return;
+                }
+
                 const data: RealtimeProgress = await res.json();
 
                 if (!data.isTraining) {
