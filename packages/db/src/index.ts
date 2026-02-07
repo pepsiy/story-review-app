@@ -19,3 +19,4 @@ const pool = new Pool({ connectionString: cleanConnectionString });
 export const db = drizzle(pool, { schema });
 
 export * from './schema';
+export * from './inventory';
