@@ -108,6 +108,12 @@ class KeyManager {
         this.keyList = Array.from(this.keys.keys());
 
         console.log(`🔐 KeyManager Initialized with ${this.keys.size} keys.`);
+
+        // Log Paid Keys
+        const paidKeys = Array.from(this.keys.values()).filter(k => k.rpmLimit > 100);
+        console.log(`💎 Paid Keys Detected: ${paidKeys.length}`);
+        paidKeys.forEach(k => console.log(`   - 💎 PAID (Limit: ${k.rpmLimit} RPM): ...${k.key.slice(-5)}`));
+
         this.initialized = true;
     }
 
@@ -192,7 +198,9 @@ class KeyManager {
 
         if (minWaitTime < 100) minWaitTime = 1000;
 
-        console.log(`⏳ All ${this.keys.size} keys busy/cooling. Waiting ${(minWaitTime / 1000).toFixed(1)}s...`);
+        const coolingCount = Array.from(this.keys.values()).filter(k => k.cooldownUntil > Date.now()).length;
+        const rateLimitedCount = Array.from(this.keys.values()).filter(k => k.requestsInCurrentWindow >= k.rpmLimit).length;
+        console.log(`⏳ All ${this.keys.size} keys unavailable. Waiting ${(minWaitTime / 1000).toFixed(1)}s... (Cooling: ${coolingCount}, RateLimited: ${rateLimitedCount})`);
         await new Promise(r => setTimeout(r, minWaitTime + 100));
 
         // Recursively try again after wait
@@ -287,7 +295,7 @@ export const generateText = async (prompt: string): Promise<string> => {
             const genAI = new GoogleGenerativeAI(key);
 
             // REVERT: Force Model 2.5 Flash as requested
-            const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+            const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash"; // Fixed to 1.5-flash
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 generationConfig: {
