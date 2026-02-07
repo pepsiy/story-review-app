@@ -2,9 +2,40 @@ export const ITEM_TYPES = {
     SEED: 'SEED',
     PRODUCT: 'PRODUCT', // Harvested item
     CONSUMABLE: 'CONSUMABLE', // Pills
+    WEAPON: 'WEAPON',
+    ARMOR: 'ARMOR',
+    ACCESSORY: 'ACCESSORY'
 };
 
-export const ITEMS: Record<string, { id: string, name: string, type: string, price?: number, growTime?: number, exp?: number, sellPrice?: number, description?: string }> = {
+export const ITEMS: Record<string, {
+    id: string, name: string, type: string, element?: string,
+    price?: number, growTime?: number, exp?: number, sellPrice?: number, description?: string,
+    stats?: { attack?: number, defense?: number, hp?: number, speed?: number }
+}> = {
+    // Equipment - Weapons
+    'weapon_wood_sword': {
+        id: 'weapon_wood_sword', name: 'Mộc Kiếm', type: ITEM_TYPES.WEAPON, element: 'WOOD',
+        price: 100, sellPrice: 20, description: "Kiếm làm bằng gỗ, dành cho người mới luyện tập.",
+        stats: { attack: 10 }
+    },
+    'weapon_iron_sword': {
+        id: 'weapon_iron_sword', name: 'Thiết Kiếm', type: ITEM_TYPES.WEAPON, element: 'METAL',
+        price: 500, sellPrice: 100, description: "Kiếm rèn từ sắt thường, sắc bén hơn gỗ.",
+        stats: { attack: 25 }
+    },
+
+    // Equipment - Armors
+    'armor_cloth': {
+        id: 'armor_cloth', name: 'Áo Vải Thô', type: ITEM_TYPES.ARMOR, element: 'WOOD',
+        price: 100, sellPrice: 20, description: "Áo vải bình thường, che chắn chút ít.",
+        stats: { defense: 5, hp: 20 }
+    },
+    'armor_leather': {
+        id: 'armor_leather', name: 'Giáp Da Thú', type: ITEM_TYPES.ARMOR, element: 'EARTH',
+        price: 600, sellPrice: 120, description: "Giáp làm từ da thú, khá bền.",
+        stats: { defense: 15, hp: 50 }
+    },
+
     // Seeds
     'seed_linh_thao': { id: 'seed_linh_thao', name: 'Hạt Linh Thảo', type: ITEM_TYPES.SEED, price: 10, growTime: 300 }, // 5 mins
     'seed_nhan_sam': { id: 'seed_nhan_sam', name: 'Hạt Nhân Sâm', type: ITEM_TYPES.SEED, price: 50, growTime: 1800 }, // 30 mins
@@ -32,6 +63,14 @@ export const RECIPES: Record<string, { ingredients: { itemId: string, quantity: 
     }
 };
 
+export const ELEMENTS = {
+    METAL: { name: 'Kim', icon: '⚔️', weakness: 'FIRE', strength: 'WOOD' },
+    WOOD: { name: 'Mộc', icon: '🌲', weakness: 'METAL', strength: 'EARTH' },
+    WATER: { name: 'Thủy', icon: '💧', weakness: 'EARTH', strength: 'FIRE' },
+    FIRE: { name: 'Hỏa', icon: '🔥', weakness: 'WATER', strength: 'METAL' },
+    EARTH: { name: 'Thổ', icon: '⛰️', weakness: 'WOOD', strength: 'WATER' }
+};
+
 // Config costs for unlocking slots (Index 0-2 are free)
 export const PLOT_UNLOCK_COSTS: Record<number, number> = {
     3: 1000,
@@ -46,6 +85,12 @@ export const WATER_CONFIG = {
     REDUCTION_PERCENT: 0.1, // 10% reduction per water
     MAX_WATER_PER_CROP: 3,
     COOLDOWN_MS: 15 * 60 * 1000, // 15 Minutes
+};
+
+export const STAMINA_CONFIG = {
+    REGEN_RATE_MS: 5 * 60 * 1000, // 5 Minutes per point
+    REGEN_AMOUNT: 1,
+    MAX_DEFAULT: 100,
 };
 
 export const CULTIVATION_LEVELS = [
@@ -156,3 +201,46 @@ export const RANKING_TIERS = [
     { tier: 'DIAMOND', minPoints: 7000, icon: '💎', rewardGold: 50000 },
     { tier: 'LEGEND', minPoints: 15000, icon: '👑', rewardGold: 100000 }
 ];
+
+export const TRAINING_MAPS: Record<string, {
+    id: string;
+    name: string;
+    description: string;
+    reqLevel: number; // Cultivation Level Index (0: Phàm Nhân, 1: Luyện Khí...)
+    reqChapterId?: number; // Optional: Require reading a chapter
+    expPerMin: number;
+    rewards: { itemId: string, chance: number, quantity: number }[];
+}> = {
+    'map_forest_1': {
+        id: 'map_forest_1',
+        name: 'Rừng Sơ Nhập',
+        description: 'Khu rừng yên tĩnh, thích hợp cho người mới bắt đầu thiền định.',
+        reqLevel: 0,
+        expPerMin: 5,
+        rewards: [
+            { itemId: 'herb_linh_thao', chance: 0.3, quantity: 1 },
+            { itemId: 'seed_linh_thao', chance: 0.1, quantity: 1 }
+        ]
+    },
+    'map_cave_1': {
+        id: 'map_cave_1',
+        name: 'Hang Động Bí Ẩn',
+        description: 'Nơi linh khí hội tụ, nhưng có nhiều dơi độc.',
+        reqLevel: 1, // Luyện Khí
+        expPerMin: 15,
+        rewards: [
+            { itemId: 'herb_nhan_sam', chance: 0.2, quantity: 1 },
+            { itemId: 'seed_nhan_sam', chance: 0.05, quantity: 1 }
+        ]
+    },
+    'map_mountain_1': {
+        id: 'map_mountain_1',
+        name: 'Đỉnh Núi Tuyết',
+        description: 'Lạnh giá thấu xương, rèn luyện ý chí.',
+        reqLevel: 2, // Trúc Cơ
+        expPerMin: 50,
+        rewards: [
+            { itemId: 'item_talisman_protect', chance: 0.01, quantity: 1 }
+        ]
+    }
+};

@@ -138,6 +138,14 @@ export const users = pgTable("user", {
     // Phase 4: Event Buffs
     activeBuffs: text("active_buffs"), // JSON stringified array of { type, value, expireAt, source }
 
+    // Phase 27: Training Map (AFK)
+    trainingMapId: text("training_map_id"),
+    trainingStartedAt: timestamp("training_started_at"),
+
+    // Phase 28: Combat System
+    combatStatus: text("combat_status").default("IDLE"), // IDLE | IN_COMBAT
+    combatState: text("combat_state"), // JSON string of CombatState
+
     // Phase 5: Professions
     professionAlchemyLevel: integer("profession_alchemy_level").default(1),
     professionAlchemyExp: integer("profession_alchemy_exp").default(0),
@@ -146,6 +154,20 @@ export const users = pgTable("user", {
     raidsToday: integer("raids_today").default(0),
     lastRaidReset: timestamp("last_raid_reset").defaultNow(),
     protectionUntil: timestamp("protection_until"),
+
+    // Phase 25: RPG Stats & Stamina
+    statStr: integer("stat_str").default(10), // Sức mạnh
+    statAgi: integer("stat_agi").default(10), // Thân pháp
+    statInt: integer("stat_int").default(10), // Ngộ tính
+    statVit: integer("stat_vit").default(10), // Căn cốt
+    statPoints: integer("stat_points").default(0), // Điểm tiềm năng chưa cộng
+
+    stamina: integer("stamina").default(100),
+    maxStamina: integer("max_stamina").default(100),
+    lastStaminaUpdate: timestamp("last_stamina_update").defaultNow(),
+
+    currentHealth: integer("current_health").default(100),
+    maxHealth: integer("max_health").default(100),
 
     // Phase 24: Ranking
     rankingPoints: integer("ranking_points").default(0),

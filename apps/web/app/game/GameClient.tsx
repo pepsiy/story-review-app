@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { useSession, signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap, Trophy, Flame, Shield } from "lucide-react";
+import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap, Trophy, Flame, Shield, User, Heart, Swords, Brain, Wind, Footprints, Map } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
+import StoryTab from "@/components/game/StoryTab";
 
 // Types
 type Plot = {
@@ -25,6 +26,8 @@ type InventoryItem = {
     itemId: string;
     quantity: number;
     type: string;
+    isEquipped?: boolean;
+    enchantLevel?: number;
 };
 
 type UserState = {
@@ -39,6 +42,12 @@ type UserState = {
     // Phase 5: Professions
     professionAlchemyLevel?: number;
     professionAlchemyExp?: number;
+
+    // Phase 28: Combat
+    combatStatus?: string;
+    combatState?: any;
+    name?: string;
+    image?: string;
 };
 
 type Mission = {
@@ -105,6 +114,35 @@ type ArenaBattle = {
     createdAt: string;
 };
 
+type CharacterProfile = {
+    stats: {
+        str: number;
+        agi: number;
+        int: number;
+        vit: number;
+        points: number;
+    };
+    resources: {
+        stamina: number;
+        maxStamina: number;
+        hp: number;
+        maxHp: number;
+    };
+    derived: {
+        attack: number;
+        magicAttack: number;
+        defense: number;
+        speed: number;
+        hpMax: number;
+        critChance: number;
+        dodgeChance: number;
+    };
+    cultivation: {
+        level: string;
+        exp: number;
+    };
+};
+
 type TierInfo = {
     tier: string;
     icon: string;
@@ -117,6 +155,12 @@ type GameState = {
     plots: Plot[];
     inventory: InventoryItem[];
     itemsDef?: any;
+    equipment?: any; // Start logic
+    training?: {
+        trainingMapId: string | null;
+        trainingStartedAt: string | null; // ISO string
+        estimatedRewards?: { exp: number, minutes: number } | null;
+    };
     worldEvents?: string[]; // Phase 4
 };
 
@@ -154,8 +198,16 @@ const CULTIVATION_LEVELS = [
     { name: 'Trúc Cơ', exp: 1000, nextLevel: 'Kim Đan', req: 5000 },
     { name: 'Kim Đan', exp: 5000, nextLevel: 'Nguyên Anh', req: 20000 },
     { name: 'Nguyên Anh', exp: 20000, nextLevel: 'Hóa Thần', req: 100000 },
-    { name: 'Hóa Thần', exp: 100000, nextLevel: 'Luyện Hư', req: 500000 },
+    { name: 'Kỳ Ngộ', exp: 0, nextLevel: 'Vô Cực', req: 999999999 },
 ];
+
+const ELEMENTS: Record<string, { name: string, icon: string, color: string }> = {
+    METAL: { name: 'Kim', icon: '⚔️', color: 'text-yellow-600' },
+    WOOD: { name: 'Mộc', icon: '🌲', color: 'text-green-600' },
+    WATER: { name: 'Thủy', icon: '💧', color: 'text-blue-600' },
+    FIRE: { name: 'Hỏa', icon: '🔥', color: 'text-red-600' },
+    EARTH: { name: 'Thổ', icon: '⛰️', color: 'text-amber-700' }
+};
 
 export default function GameClient() {
     const { data: session, status } = useSession();
@@ -171,7 +223,11 @@ export default function GameClient() {
     const [beastEncounter, setBeastEncounter] = useState<BeastEncounter | null>(null);
     const [beastModalOpen, setBeastModalOpen] = useState(false); // List of sects to join
     const [mySect, setMySect] = useState<any>(null); // Current sect info
-    const [activeTab, setActiveTab] = useState<'FARM' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS' | 'LEADERBOARD' | 'SECT' | 'PVP'>('FARM');
+    const [activeTab, setActiveTab] = useState<'FARM' | 'STORY' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS' | 'LEADERBOARD' | 'SECT' | 'PVP' | 'CHARACTER' | 'TRAINING'>('STORY');
+
+    // Phase 25: Character RPG
+    const [character, setCharacter] = useState<CharacterProfile | null>(null);
+    const [trainingState, setTrainingState] = useState<any>(null); // Local state for training UI
 
     // PVP State
     const [pvpSubTab, setPvpSubTab] = useState<'RAID' | 'ARENA'>('RAID');
@@ -185,6 +241,179 @@ export default function GameClient() {
     const [arenaModalOpen, setArenaModalOpen] = useState(false);
 
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+    // Phase 25: Character API
+    const fetchCharacterProfile = async () => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/character/profile?userId=${session.user.id}`);
+            const data = await res.json();
+            if (data.stats) setCharacter(data);
+        } catch (e) { console.error("Fetch Char Profile Error", e); }
+    };
+
+    const addStatPoint = async (stat: string, amount: number) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/character/stats`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session.user.id, stat, amount })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(`Đã cộng điểm ${stat.toUpperCase()}`);
+                fetchCharacterProfile();
+            } else {
+                toast.error(data.error);
+            }
+            if (data.success) {
+                toast.success(`Đã cộng điểm ${stat.toUpperCase()}`);
+                fetchCharacterProfile();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const equipItem = async (inventoryId: number) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/character/equip`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session.user.id, inventoryId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(data.message);
+                fetchState(); // Refresh inventory
+                fetchCharacterProfile(); // Refresh stats
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const unequipItem = async (inventoryId: number) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/character/unequip`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session.user.id, inventoryId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Đã tháo trang bị");
+                fetchState();
+                fetchCharacterProfile();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const fetchTrainingState = async () => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/training?userId=${session.user.id}`);
+            const data = await res.json();
+            setTrainingState(data);
+        } catch (e) { console.error("Fetch Training State Error", e); }
+    };
+
+    const startTraining = async (mapId: string) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/training/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session.user.id, mapId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(data.message);
+                fetchTrainingState();
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    const claimTraining = async (stop: boolean) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/training/claim`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session.user.id, stop })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success(data.message);
+                fetchTrainingState();
+                fetchState(); // Update exp/items
+                if (data.rewards?.items?.length > 0) {
+                    toast.success(`Nhận được: ${data.rewards.items.map((i: any) => `${i.quantity}x ${i.name}`).join(', ')}`);
+                }
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối"); }
+    };
+
+    // COMBAT ACTIONS
+    const startCombat = async (type: 'PVE', targetId: string) => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/combat/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session.user.id, type, targetId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast.success("Vào trận chiến!");
+                fetchState(); // Should update combatStatus to IN_COMBAT
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối combat"); }
+    };
+
+    const combatAction = async (action: 'ATTACK' | 'SKILL' | 'FLEE') => {
+        if (!session?.user?.id) return;
+        try {
+            const res = await fetch(`${API_URL}/game/combat/action`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: session.user.id, action })
+            });
+            const data = await res.json();
+            if (data.success) {
+                if (data.finished) {
+                    if (data.result === 'VICTORY') {
+                        toast.success("Chiến thắng! " + (data.rewards ? `+${data.rewards.exp} Exp` : ''));
+                    } else if (data.result === 'DEFEAT') {
+                        toast.error("Thất bại!");
+                    } else {
+                        toast.info(data.message);
+                    }
+                    fetchState(); // Refresh to exit combat mode
+                } else {
+                    // Update local state smoothly if possible, or just fetchState
+                    // Better to set state directly for animation
+                    setState(prev => prev ? ({
+                        ...prev,
+                        user: { ...prev.user, combatState: JSON.stringify(data.combatState) }
+                    }) : null);
+                }
+            } else {
+                toast.error(data.error);
+            }
+        } catch (e) { toast.error("Lỗi kết nối combat"); }
+    };
 
     const fetchState = async () => {
         if (!session?.user?.id) return;
@@ -347,8 +576,20 @@ export default function GameClient() {
             fetchLogs();
             fetchLeaderboard();
             checkBeastEncounter();
+            fetchCharacterProfile();
         }
     }, [session, status]);
+
+    useEffect(() => {
+        if (!session?.user?.id) return;
+
+        if (activeTab === 'CHARACTER') {
+            fetchCharacterProfile();
+        }
+        if (activeTab === 'TRAINING') {
+            fetchTrainingState();
+        }
+    }, [session, state?.user?.id, activeTab]);
 
     useEffect(() => {
         if (state?.user?.sectId) {
@@ -680,7 +921,7 @@ export default function GameClient() {
                     description: data.message,
                     variant: data.success ? "default" : "destructive",
                 });
-                fetchGameState(); // Update gold
+                fetchState(); // Update gold
                 fetchPvpStatus(); // Update logs
             } else {
                 toast({
@@ -1003,6 +1244,12 @@ export default function GameClient() {
                         <Sprout className="w-4 h-4" /> Nông Trại
                     </button>
                     <button
+                        onClick={() => setActiveTab('STORY')}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'STORY' ? 'bg-white text-amber-700 shadow-sm' : 'bg-amber-800/10 text-amber-800 hover:bg-amber-800/20'}`}
+                    >
+                        📖 Cốt Truyện
+                    </button>
+                    <button
                         onClick={() => setActiveTab('SHOP')}
                         className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'SHOP' ? 'bg-white text-blue-700 shadow-sm' : 'bg-blue-800/10 text-blue-800 hover:bg-blue-800/20'}`}
                     >
@@ -1038,10 +1285,26 @@ export default function GameClient() {
                     >
                         ⛩️ Tông Môn
                     </button>
+                    <button
+                        onClick={() => setActiveTab('TRAINING')}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'TRAINING' ? 'bg-white text-rose-700 shadow-sm' : 'bg-rose-800/10 text-rose-800 hover:bg-rose-800/20'}`}
+                    >
+                        <Map className="w-4 h-4" /> Luyện Tập
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('CHARACTER')}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'CHARACTER' ? 'bg-white text-rose-700 shadow-sm' : 'bg-rose-800/10 text-rose-800 hover:bg-rose-800/20'}`}
+                    >
+                        <User className="w-4 h-4" /> Hồ Sơ
+                    </button>
                 </div>
 
                 {/* Main Content Area */}
                 <div className="bg-white rounded-b-xl rounded-tr-xl shadow-lg p-6 min-h-[400px]">
+
+                    {activeTab === 'STORY' && (
+                        <StoryTab userId={session!.user.id} onCombatStart={(enemyId) => startCombat({ type: 'PVE', targetId: enemyId })} />
+                    )}
 
                     {activeTab === 'FARM' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1094,6 +1357,21 @@ export default function GameClient() {
                                                             >
                                                                 <Zap className="w-3 h-3" />
                                                             </Button>
+                                                        )}
+                                                        {(item.type === 'WEAPON' || item.type === 'ARMOR' || item.type === 'ACCESSORY') && (
+                                                            item.isEquipped ? (
+                                                                <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded">Đang Mặc</span>
+                                                            ) : (
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="icon"
+                                                                    className="h-6 w-6 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                                                    title="Trang bị"
+                                                                    onClick={() => equipItem(item.id)}
+                                                                >
+                                                                    <Shield className="w-3 h-3" />
+                                                                </Button>
+                                                            )
                                                         )}
                                                     </div>
                                                 </div>
@@ -1290,9 +1568,14 @@ export default function GameClient() {
                                                                 <h5 className="font-bold text-slate-700 text-sm">{mission.title}</h5>
                                                                 <div className="text-xs text-orange-600 mt-0.5">Thưởng: {mission.rewardGold} Vàng • {mission.rewardExp} Exp</div>
                                                             </div>
-                                                            <Button size="sm" variant="outline" onClick={() => acceptMission(mission.id)}>
-                                                                Nhận
-                                                            </Button>
+                                                            {/* Phase 28: Simple Start Combat Trigger for Missions (Mock) */}
+                                                            {mission.type === 'HUNT' ? (
+                                                                <Button size="sm" variant="destructive" onClick={() => startCombat('PVE', 'beast_wolf')}>Săn Sói</Button>
+                                                            ) : (
+                                                                <Button size="sm" variant="outline" onClick={() => acceptMission(mission.id)}>
+                                                                    Nhận
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 );
@@ -1726,64 +2009,415 @@ export default function GameClient() {
                             </div>
                         </div>
                     )}
+                    {activeTab === 'CHARACTER' && character && (
+                        <div className="space-y-6">
+                            <div className="flex items-center gap-4 border-b pb-4">
+                                <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center text-4xl">
+                                    👤
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">{session?.user?.name}</h2>
+                                    <p className="text-sm text-slate-500">{character.cultivation.level} - {character.cultivation.exp.toLocaleString()} Exp</p>
+                                </div>
+                                <div className="ml-auto flex gap-4 text-center">
+                                    <div>
+                                        <div className="text-xs text-slate-400">Chiến Lực</div>
+                                        <div className="font-bold text-xl text-rose-600">{(character.derived.attack + character.derived.defense + character.derived.hpMax / 10).toFixed(0)}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Equipment Slots */}
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Shield className="w-4 h-4" /> Trang Bị</h3>
+                                <div className="grid grid-cols-3 gap-4">
+                                    {['weapon', 'armor', 'accessory'].map(slot => {
+                                        const equipped = (character as any).equipment?.[slot];
+                                        const slotNames: any = { weapon: 'Vũ Khí', armor: 'Giáp', accessory: 'Pháp Bảo' };
+
+                                        return (
+                                            <div key={slot} className="bg-white p-3 rounded border border-slate-200 flex flex-col items-center text-center relative group">
+                                                <div className="text-xs text-slate-400 mb-1 font-bold uppercase">{slotNames[slot]}</div>
+                                                {equipped ? (
+                                                    <>
+                                                        <div className="font-bold text-indigo-700 text-sm mb-1">{equipped.name}</div>
+                                                        <div className="text-[10px] text-slate-500 mb-2">
+                                                            {equipped.stats?.attack && `Tấn công +${equipped.stats.attack} `}
+                                                            {equipped.stats?.defense && `Phòng thủ +${equipped.stats.defense} `}
+                                                            {equipped.stats?.hp && `HP +${equipped.stats.hp} `}
+                                                        </div>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 text-[10px] text-red-500 hover:bg-red-50 w-full"
+                                                            onClick={() => unequipItem(equipped.instanceId)}
+                                                        >
+                                                            Tháo
+                                                        </Button>
+                                                    </>
+                                                ) : (
+                                                    <div className="text-slate-300 italic text-xs py-4">Trống</div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-red-50 p-3 rounded-lg border border-red-100">
+                                    <div className="flex justify-between mb-1 text-sm font-bold text-red-700">
+                                        <span className="flex items-center gap-1"><Heart className="w-4 h-4" /> Sinh Lực</span>
+                                        <span>{character.resources.hp} / {character.resources.maxHp}</span>
+                                    </div>
+                                    <div className="h-2 bg-red-200 rounded-full overflow-hidden">
+                                        <div className="h-full bg-red-500" style={{ width: `${(character.resources.hp / character.resources.maxHp) * 100}%` }}></div>
+                                    </div>
+                                </div>
+                                <div className="bg-green-50 p-3 rounded-lg border border-green-100">
+                                    <div className="flex justify-between mb-1 text-sm font-bold text-green-700">
+                                        <span className="flex items-center gap-1"><Zap className="w-4 h-4" /> Thể Lực</span>
+                                        <span>{character.resources.stamina} / {character.resources.maxStamina}</span>
+                                    </div>
+                                    <div className="h-2 bg-green-200 rounded-full overflow-hidden">
+                                        <div className="h-full bg-green-500" style={{ width: `${(character.resources.stamina / character.resources.maxStamina) * 100}%` }}></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="font-bold text-slate-700 flex items-center gap-2"><User className="w-4 h-4" /> Thuộc Tính Cơ Bản</h3>
+                                        <div className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                                            Điểm Tiềm Năng: {character.stats.points}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {[
+                                            { id: 'str', name: 'Sức Mạnh', icon: <Swords className="w-4 h-4 text-red-500" />, val: character.stats.str, desc: 'Tăng Tấn Công' },
+                                            { id: 'agi', name: 'Thân Pháp', icon: <Wind className="w-4 h-4 text-green-500" />, val: character.stats.agi, desc: 'Tăng Tốc Độ, Bạo Kích' },
+                                            { id: 'int', name: 'Ngộ Tính', icon: <Brain className="w-4 h-4 text-blue-500" />, val: character.stats.int, desc: 'Tăng Phép Thuật' },
+                                            { id: 'vit', name: 'Căn Cốt', icon: <Shield className="w-4 h-4 text-orange-500" />, val: character.stats.vit, desc: 'Tăng HP, Phòng Thủ' }
+                                        ].map(stat => (
+                                            <div key={stat.id} className="flex items-center justify-between bg-white p-2 rounded shadow-sm">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 bg-slate-100 rounded flex items-center justify-center">{stat.icon}</div>
+                                                    <div>
+                                                        <div className="font-bold text-slate-700">{stat.name}</div>
+                                                        <div className="text-[10px] text-slate-400">{stat.desc}</div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="font-mono text-lg font-bold">{stat.val}</span>
+                                                    {character.stats.points > 0 && (
+                                                        <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => addStatPoint(stat.id, 1)}>+</Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                                    <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><Swords className="w-4 h-4" /> Chỉ Số Chiến Đấu</h3>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-white p-2 rounded border border-slate-100">
+                                            <div className="text-xs text-slate-400">Tấn Công</div>
+                                            <div className="font-bold text-lg text-slate-700">{character.derived.attack}</div>
+                                        </div>
+                                        <div className="bg-white p-2 rounded border border-slate-100">
+                                            <div className="text-xs text-slate-400">Phòng Thủ</div>
+                                            <div className="font-bold text-lg text-slate-700">{character.derived.defense}</div>
+                                        </div>
+                                        <div className="bg-white p-2 rounded border border-slate-100">
+                                            <div className="text-xs text-slate-400">Tốc Độ</div>
+                                            <div className="font-bold text-lg text-slate-700">{character.derived.speed}</div>
+                                        </div>
+                                        <div className="bg-white p-2 rounded border border-slate-100">
+                                            <div className="text-xs text-slate-400">Bạo Kích</div>
+                                            <div className="font-bold text-lg text-slate-700">{character.derived.critChance.toFixed(1)}%</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'TRAINING' && (
+                        <div className="space-y-6">
+                            <h3 className="font-bold text-slate-700 text-xl border-b pb-2 flex items-center gap-2">
+                                <Map className="w-6 h-6 text-green-600" /> Bản Đồ Luyện Tập (AFK)
+                            </h3>
+
+                            {/* Current Training Status */}
+                            {trainingState?.trainingMapId ? (
+                                <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center animate-in fade-in zoom-in duration-300">
+                                    <h4 className="text-lg font-bold text-green-800 mb-2">Đang Luyện Tập Tại: {trainingState.trainingMapId === 'map_forest_1' ? 'Rừng Sơ Nhập' : trainingState.trainingMapId === 'map_cave_1' ? 'Hang Động Bí Ẩn' : 'Bản Đồ'}</h4>
+                                    <div className="text-4xl my-4 animate-bounce">🧘</div>
+                                    <p className="text-slate-600 mb-4">
+                                        Bắt đầu: {trainingState.trainingStartedAt ? formatDistanceToNow(new Date(trainingState.trainingStartedAt), { addSuffix: true, locale: vi }) : ''}
+                                    </p>
+
+                                    {trainingState.estimatedRewards && (
+                                        <div className="bg-white/50 p-3 rounded mb-4 inline-block">
+                                            <div className="text-sm font-bold text-slate-700">Thưởng dự kiến (sau {trainingState.estimatedRewards.minutes} phút):</div>
+                                            <div className="text-green-600 font-bold">+{trainingState.estimatedRewards.exp} EXP</div>
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-center gap-4 mt-4">
+                                        <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => fetchTrainingState()}>Làm mới</Button>
+                                        <Button
+                                            variant="destructive"
+                                            className="bg-orange-500 hover:bg-orange-600"
+                                            onClick={() => claimTraining(true)} // Stop
+                                        >
+                                            Kết Thúc & Nhận Thưởng
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-2 italic">Tối thiểu 1 phút để nhận thưởng.</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    <div className="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all group">
+                                        <div className="h-32 bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center text-4xl group-hover:scale-105 transition-transform">🌲</div>
+                                        <div className="p-4">
+                                            <h4 className="font-bold text-slate-800">Rừng Sơ Nhập</h4>
+                                            <p className="text-xs text-slate-500 mb-3 min-h-[40px]">Khu rừng yên tĩnh, thích hợp cho người mới.</p>
+                                            <div className="flex justify-between text-xs mb-4">
+                                                <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded">Yêu cầu: Phàm Nhân</span>
+                                                <span className="font-bold text-orange-500">5 EXP/phút</span>
+                                            </div>
+                                            <Button className="w-full" onClick={() => startTraining('map_forest_1')}>Bắt Đầu Luyện Tập</Button>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all group">
+                                        <div className="h-32 bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-4xl group-hover:scale-105 transition-transform">🦇</div>
+                                        <div className="p-4">
+                                            <h4 className="font-bold text-slate-800">Hang Động Bí Ẩn</h4>
+                                            <p className="text-xs text-slate-500 mb-3 min-h-[40px]">Nơi linh khí hội tụ, nhưng có nhiều dơi độc.</p>
+                                            <div className="flex justify-between text-xs mb-4">
+                                                <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Yêu cầu: Luyện Khí</span>
+                                                <span className="font-bold text-orange-500">15 EXP/phút</span>
+                                            </div>
+                                            <Button
+                                                className="w-full bg-slate-700 hover:bg-slate-800"
+                                                disabled={state.user.cultivationLevel === 'Phàm Nhân'}
+                                                onClick={() => startTraining('map_cave_1')}
+                                            >
+                                                {state.user.cultivationLevel === 'Phàm Nhân' ? 'Cần Luyện Khí' : 'Bắt Đầu Luyện Tập'}
+                                            </Button>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all group opacity-75">
+                                        <div className="h-32 bg-gradient-to-b from-blue-200 to-white flex items-center justify-center text-4xl">🏔️</div>
+                                        <div className="p-4">
+                                            <h4 className="font-bold text-slate-800">Đỉnh Núi Tuyết</h4>
+                                            <p className="text-xs text-slate-500 mb-3 min-h-[40px]">Lạnh giá thấu xương, rèn luyện ý chí.</p>
+                                            <div className="flex justify-between text-xs mb-4">
+                                                <span className="text-purple-600 bg-purple-50 px-2 py-0.5 rounded">Yêu cầu: Trúc Cơ</span>
+                                                <span className="font-bold text-orange-500">50 EXP/phút</span>
+                                            </div>
+                                            <Button disabled className="w-full bg-slate-100 text-slate-400">Chưa Mở Khóa</Button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* Beast Encounter Modal */}
-            {beastEncounter && beastModalOpen && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => { }}>
-                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative" onClick={(e) => e.stopPropagation()}>
-                        {/* Beast Info */}
-                        <div className="text-center mb-6">
-                            <div className="text-6xl mb-3">{beastEncounter.beast.icon || '👾'}</div>
-                            <h2 className="text-2xl font-bold text-red-600">{beastEncounter.beast.name}</h2>
-                            <p className="text-sm text-slate-600 mt-1">{beastEncounter.beast.description}</p>
-                        </div>
+            {
+                beastEncounter && beastModalOpen && (
+                    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => { }}>
+                        <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative" onClick={(e) => e.stopPropagation()}>
+                            {/* Beast Info */}
+                            <div className="text-center mb-6">
+                                <div className="text-6xl mb-3">{beastEncounter.beast.icon || '👾'}</div>
+                                <h2 className="text-2xl font-bold text-red-600">{beastEncounter.beast.name}</h2>
+                                <p className="text-sm text-slate-600 mt-1">{beastEncounter.beast.description}</p>
+                            </div>
 
-                        {/* Health Bar */}
-                        <div className="mb-6">
-                            <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
-                                <span>Máu quái</span>
-                                <span>{beastEncounter.encounter.beastHealth} / {beastEncounter.beast.health}</span>
+                            {/* Health Bar */}
+                            <div className="mb-6">
+                                <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
+                                    <span>Máu quái</span>
+                                    <span>{beastEncounter.encounter.beastHealth} / {beastEncounter.beast.health}</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                    <div
+                                        className="bg-red-500 h-full transition-all"
+                                        style={{ width: `${(beastEncounter.encounter.beastHealth / beastEncounter.beast.health) * 100}%` }}
+                                    />
+                                </div>
                             </div>
-                            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                                <div
-                                    className="bg-red-500 h-full transition-all"
-                                    style={{ width: `${(beastEncounter.encounter.beastHealth / beastEncounter.beast.health) * 100}%` }}
-                                />
-                            </div>
-                        </div>
 
-                        {/* Stats */}
-                        <div className="grid grid-cols-2 gap-3 mb-6">
-                            <div className="bg-red-50 p-3 rounded-lg border border-red-100">
-                                <div className="text-xs text-slate-500 font-medium">Tấn công</div>
-                                <div className="text-lg font-bold text-red-600">{beastEncounter.beast.attack}</div>
+                            {/* Stats */}
+                            <div className="grid grid-cols-2 gap-3 mb-6">
+                                <div className="bg-red-50 p-3 rounded-lg border border-red-100">
+                                    <div className="text-xs text-slate-500 font-medium">Tấn công</div>
+                                    <div className="text-lg font-bold text-red-600">{beastEncounter.beast.attack}</div>
+                                </div>
+                                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                    <div className="text-xs text-slate-500 font-medium">Phòng thủ</div>
+                                    <div className="text-lg font-bold text-blue-600">{beastEncounter.beast.defense}</div>
+                                </div>
                             </div>
-                            <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                                <div className="text-xs text-slate-500 font-medium">Phòng thủ</div>
-                                <div className="text-lg font-bold text-blue-600">{beastEncounter.beast.defense}</div>
-                            </div>
-                        </div>
 
-                        {/* Actions */}
-                        <div className="flex gap-3">
-                            <Button
-                                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold"
-                                onClick={attackBeast}
-                            >
-                                ⚔️ Tấn Công
-                            </Button>
-                            <Button
-                                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white"
-                                onClick={fleeBeast}
-                            >
-                                🏃 Trốn Thoát
-                            </Button>
+                            {/* Actions */}
+                            <div className="flex gap-3">
+                                <Button
+                                    className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold"
+                                    onClick={attackBeast}
+                                >
+                                    ⚔️ Tấn Công
+                                </Button>
+                                <Button
+                                    className="flex-1 bg-gray-500 hover:bg-gray-600 text-white"
+                                    onClick={fleeBeast}
+                                >
+                                    🏃 Trốn Thoát
+                                </Button>
+                            </div>
                         </div>
+                    </div>
+                )
+            }
+            {/* COMBAT MODAL */}
+            {state?.user?.combatStatus === 'IN_COMBAT' && state.user.combatState && (
+                <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4 backdrop-blur-md">
+                    <div className="max-w-4xl w-full bg-slate-900 rounded-xl overflow-hidden shadow-2xl relative border border-slate-700 flex flex-col h-[600px]">
+                        {(() => {
+                            const combatState = typeof state.user.combatState === 'string' ? JSON.parse(state.user.combatState) : state.user.combatState;
+                            const { enemy, userHp, userMaxHp, logs } = combatState;
+
+                            return (
+                                <>
+                                    {/* Combat Header */}
+                                    <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-red-500 font-bold text-xl">⚔️ TRẬN CHIẾN</span>
+                                            <span className="text-slate-400 text-sm">Lượt: {combatState.turnCount}</span>
+                                        </div>
+                                        {/* <Button variant="ghost" size="sm" className="text-slate-400">Cài đặt</Button> */}
+                                    </div>
+
+                                    {/* Battle Area */}
+                                    <div className="flex-1 relative bg-[url('https://images.unsplash.com/photo-1518066000714-58c45f1a2c0a?auto=format&fit=crop&q=80&w=2000')] bg-cover bg-center">
+                                        <div className="absolute inset-0 bg-black/60"></div>
+
+                                        <div className="relative z-10 h-full flex items-center justify-between px-10 md:px-20">
+                                            {/* PLAYER */}
+                                            <div className="flex flex-col items-center gap-4">
+                                                <div className="relative group">
+                                                    <div className="w-32 h-32 bg-slate-800 rounded-full border-4 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)] flex items-center justify-center text-6xl overflow-hidden relative">
+                                                        {state.user.image ? <img src={state.user.image} className="w-full h-full object-cover" /> : '👤'}
+                                                        {/* Hit effect overlay could go here */}
+                                                    </div>
+                                                    <div className="absolute -bottom-2 -right-2 bg-blue-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">Lv.{state.user.cultivationLevel}</div>
+                                                </div>
+
+                                                {/* HP Bar */}
+                                                <div className="w-40 relative">
+                                                    <div className="flex justify-between text-xs font-bold text-blue-200 mb-1">
+                                                        <span>{state.user.name || 'Bạn'}</span>
+                                                        <span>{userHp}/{userMaxHp}</span>
+                                                    </div>
+                                                    <div className="h-3 bg-slate-700 rounded-full overflow-hidden border border-slate-600">
+                                                        <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 transition-all duration-300" style={{ width: `${(userHp / userMaxHp) * 100}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* VS */}
+                                            <div className="text-4xl font-black text-white/20 italic">VS</div>
+
+                                            {/* ENEMY */}
+                                            <div className="flex flex-col items-center gap-4">
+                                                <div className="relative animate-bounce-slow">
+                                                    <div className="w-32 h-32 bg-slate-800 rounded-full border-4 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.5)] flex items-center justify-center text-6xl relative">
+                                                        {enemy.icon || '🐺'}
+                                                    </div>
+                                                </div>
+
+                                                {/* Enemy HP Bar */}
+                                                <div className="w-40 relative">
+                                                    <div className="flex justify-between text-xs font-bold text-red-200 mb-1">
+                                                        <span>
+                                                            {enemy.name}
+                                                            {enemy.element && ELEMENTS[enemy.element] && (
+                                                                <span className={`ml-2 ${ELEMENTS[enemy.element].color} bg-white px-1 rounded`}>
+                                                                    {ELEMENTS[enemy.element].icon}
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                        <span>{enemy.hp}/{enemy.fullHp}</span>
+                                                    </div>
+                                                    <div className="h-3 bg-slate-700 rounded-full overflow-hidden border border-slate-600">
+                                                        <div className="h-full bg-gradient-to-r from-red-400 to-red-600 transition-all duration-300" style={{ width: `${(enemy.hp / enemy.fullHp) * 100}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action & Log Panel */}
+                                    <div className="h-48 bg-slate-900 border-t border-slate-700 flex flex-col md:flex-row">
+                                        {/* Logs */}
+                                        <div className="flex-1 p-4 overflow-y-auto border-b md:border-b-0 md:border-r border-slate-700 font-mono text-sm space-y-1">
+                                            {logs.slice().reverse().map((log: any, i: number) => (
+                                                <div key={i} className={`
+                                                    ${log.type === 'player-atk' ? 'text-blue-400' : ''}
+                                                    ${log.type === 'enemy-atk' ? 'text-red-400' : ''}
+                                                    ${log.type === 'info' ? 'text-slate-400 italic' : ''}
+                                                    ${log.type === 'victory' ? 'text-yellow-400 font-bold' : ''}
+                                                    ${log.type === 'defeat' ? 'text-red-600 font-bold' : ''}
+                                                `}>
+                                                    <span className="opacity-50 mr-2">[{combatState.turnCount - Math.floor(i / 2)}]</span>
+                                                    {log.text}
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="w-full md:w-1/3 p-4 grid grid-cols-2 gap-3 bg-slate-800">
+                                            <Button
+                                                className="h-full text-lg font-bold bg-red-600 hover:bg-red-700 border-b-4 border-red-800 active:border-b-0 active:translate-y-1 transition-all"
+                                                onClick={() => combatAction('ATTACK')}
+                                            >
+                                                ⚔️ Tấn Công
+                                            </Button>
+                                            <Button
+                                                className="h-full font-bold bg-slate-600 hover:bg-slate-700 border-b-4 border-slate-800 text-slate-300"
+                                                disabled
+                                            >
+                                                🔮 Kỹ Năng (Lv.5)
+                                            </Button>
+                                            <Button
+                                                className="h-full font-bold bg-green-600 hover:bg-green-700 border-b-4 border-green-800"
+                                                disabled
+                                            >
+                                                💊 Vật Phẩm
+                                            </Button>
+                                            <Button
+                                                className="h-full font-bold bg-yellow-600 hover:bg-yellow-700 border-b-4 border-yellow-800 text-white"
+                                                onClick={() => combatAction('FLEE')}
+                                            >
+                                                🏃 Bỏ Chạy
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </>
+                            );
+                        })()}
                     </div>
                 </div>
             )}
-        </div>
+        </div >
     );
 }

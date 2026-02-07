@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authenticateToken } from "../middleware/auth";
 import {
     getGameState,
     plantSeed,
@@ -90,5 +91,29 @@ router.get("/ranking/my-tier", getMyTier);
 // Admin / Seed
 import { seedGameData } from "../controllers/gameController";
 router.post("/admin/seed", seedGameData);
+
+// Character RPG Routes
+import { getCharacterProfile, distributeStatPoints, equipItem, unequipItem } from "../controllers/characterController";
+import { getTrainingState, startTraining, claimTrainingRewards } from "../controllers/trainingController";
+
+router.get('/character/profile', getCharacterProfile);
+router.post('/character/stats', distributeStatPoints);
+router.post('/character/equip', equipItem);
+router.post('/character/unequip', unequipItem);
+
+// Training / AFK Routes
+router.get('/training', getTrainingState);
+router.post('/training/start', startTraining);
+router.post('/training/claim', claimTrainingRewards);
+
+// Turn-Based Combat Routes
+import { startCombat, combatAction } from "../controllers/combatController";
+router.post('/combat/start', startCombat);
+router.post('/combat/action', combatAction);
+
+// Story Mode Routes
+import { getStoryProgress, advanceStory } from "../controllers/storyController";
+router.get('/story/progress', getStoryProgress);
+router.post('/story/advance', advanceStory);
 
 export default router;
