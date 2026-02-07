@@ -80,6 +80,60 @@ export const startTraining = async (req: Request, res: Response) => {
     }
 };
 
+// Phase 32: Real-time progress for AFK animation
+export const getRealtimeProgress = async (req: Request, res: Response) => {
+    try {
+        const userId = req.query.userId as string;
+        if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+        const user = await db.query.users.findFirst({
+            where: eq(users.id, userId)
+        });
+
+        if (!user || !user.trainingMapId || !user.trainingStartedAt) {
+            return res.json({
+                isTraining: false,
+                totalKills: 0,
+                goldEarned: 0,
+                expEarned: 0
+            });
+        }
+
+        const map = TRAINING_MAPS[user.trainingMapId];
+        if (!map) {
+            return res.json({ isTraining: false, totalKills: 0, goldEarned: 0, expEarned: 0 });
+        }
+
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now.getTime() - user.trainingStartedAt.getTime()) / 1000);
+        const elapsedMinutes = elapsedSeconds / 60;
+
+        // Calculate progress
+        const totalKills = Math.floor(elapsedMinutes * map.killRate);
+        const goldEarned = totalKills * map.goldPerKill;
+        const expEarned = totalKills * map.expPerKill;
+
+        return res.json({
+            isTraining: true,
+            mapId: user.trainingMapId,
+            mapName: map.name,
+            enemyName: map.enemyName,
+            enemyIcon: map.enemyIcon,
+            totalKills,
+            goldEarned,
+            expEarned,
+            elapsedSeconds,
+            killRate: map.killRate,
+            goldPerKill: map.goldPerKill,
+            expPerKill: map.expPerKill
+        });
+
+    } catch (error) {
+        console.error('getRealtimeProgress error:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
 export const claimTrainingRewards = async (req: Request, res: Response) => {
     try {
         const { userId, stop } = req.body; // stop: boolean (True = Stop training, False = Claim & Continue)

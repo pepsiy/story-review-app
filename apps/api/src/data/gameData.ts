@@ -210,6 +210,12 @@ export const TRAINING_MAPS: Record<string, {
     reqChapterId?: number; // Optional: Require reading a chapter
     expPerMin: number;
     rewards: { itemId: string, chance: number, quantity: number }[];
+    // Phase 32: AFK Animation fields
+    enemyName: string;
+    enemyIcon: string;
+    killRate: number; // Kills per minute
+    goldPerKill: number;
+    expPerKill: number;
 }> = {
     'map_forest_1': {
         id: 'map_forest_1',
@@ -220,7 +226,12 @@ export const TRAINING_MAPS: Record<string, {
         rewards: [
             { itemId: 'herb_linh_thao', chance: 0.3, quantity: 1 },
             { itemId: 'seed_linh_thao', chance: 0.1, quantity: 1 }
-        ]
+        ],
+        enemyName: 'Sói Hoang',
+        enemyIcon: '🐺',
+        killRate: 12, // 12 kills/min = 1 kill per 5 seconds
+        goldPerKill: 5,
+        expPerKill: 3
     },
     'map_cave_1': {
         id: 'map_cave_1',
@@ -231,7 +242,12 @@ export const TRAINING_MAPS: Record<string, {
         rewards: [
             { itemId: 'herb_nhan_sam', chance: 0.2, quantity: 1 },
             { itemId: 'seed_nhan_sam', chance: 0.05, quantity: 1 }
-        ]
+        ],
+        enemyName: 'Dơi Ma',
+        enemyIcon: '🦇',
+        killRate: 10,
+        goldPerKill: 10,
+        expPerKill: 8
     },
     'map_mountain_1': {
         id: 'map_mountain_1',
@@ -241,6 +257,11 @@ export const TRAINING_MAPS: Record<string, {
         expPerMin: 50,
         rewards: [
             { itemId: 'item_talisman_protect', chance: 0.01, quantity: 1 }
-        ]
+        ],
+        enemyName: 'Yêu Ma Băng',
+        enemyIcon: '❄️',
+        killRate: 6,
+        goldPerKill: 25,
+        expPerKill: 20
     }
 };

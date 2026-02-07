@@ -94,7 +94,6 @@ router.post("/admin/seed", seedGameData);
 
 // Character RPG Routes
 import { getCharacterProfile, distributeStatPoints, equipItem, unequipItem } from "../controllers/characterController";
-import { getTrainingState, startTraining, claimTrainingRewards } from "../controllers/trainingController";
 
 router.get('/character/profile', getCharacterProfile);
 router.post('/character/stats', distributeStatPoints);
@@ -102,9 +101,11 @@ router.post('/character/equip', equipItem);
 router.post('/character/unequip', unequipItem);
 
 // Training / AFK Routes
+import { getTrainingState, startTraining, claimTrainingRewards, getRealtimeProgress } from "../controllers/trainingController";
 router.get('/training', getTrainingState);
 router.post('/training/start', startTraining);
 router.post('/training/claim', claimTrainingRewards);
+router.get('/training/realtime-progress', getRealtimeProgress);
 
 // Turn-Based Combat Routes
 import { startCombat, combatAction } from "../controllers/combatController";

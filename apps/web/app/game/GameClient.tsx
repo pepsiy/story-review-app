@@ -8,6 +8,7 @@ import { Loader2, Sprout, ShoppingBag, Pickaxe, Coins, FlaskConical, Check, Zap,
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import StoryTab from "@/components/game/StoryTab";
+import { AFKCombatOverlay } from "@/components/game/AFKCombatOverlay";
 
 // Types
 type Plot = {
@@ -2152,20 +2153,15 @@ export default function GameClient() {
 
                             {/* Current Training Status */}
                             {trainingState?.trainingMapId ? (
-                                <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center animate-in fade-in zoom-in duration-300">
-                                    <h4 className="text-lg font-bold text-green-800 mb-2">Đang Luyện Tập Tại: {trainingState.trainingMapId === 'map_forest_1' ? 'Rừng Sơ Nhập' : trainingState.trainingMapId === 'map_cave_1' ? 'Hang Động Bí Ẩn' : 'Bản Đồ'}</h4>
-                                    <div className="text-4xl my-4 animate-bounce">🧘</div>
-                                    <p className="text-slate-600 mb-4">
-                                        Bắt đầu: {trainingState.trainingStartedAt ? formatDistanceToNow(new Date(trainingState.trainingStartedAt), { addSuffix: true, locale: vi }) : ''}
-                                    </p>
+                                <>
+                                    {/* AFK Combat Animation Overlay */}
+                                    <AFKCombatOverlay
+                                        userId={session!.user.id}
+                                        mapId={trainingState.trainingMapId}
+                                        onComplete={() => fetchTrainingState()}
+                                    />
 
-                                    {trainingState.estimatedRewards && (
-                                        <div className="bg-white/50 p-3 rounded mb-4 inline-block">
-                                            <div className="text-sm font-bold text-slate-700">Thưởng dự kiến (sau {trainingState.estimatedRewards.minutes} phút):</div>
-                                            <div className="text-green-600 font-bold">+{trainingState.estimatedRewards.exp} EXP</div>
-                                        </div>
-                                    )}
-
+                                    {/* Control Buttons */}
                                     <div className="flex justify-center gap-4 mt-4">
                                         <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => fetchTrainingState()}>Làm mới</Button>
                                         <Button
@@ -2176,8 +2172,8 @@ export default function GameClient() {
                                             Kết Thúc & Nhận Thưởng
                                         </Button>
                                     </div>
-                                    <p className="text-xs text-slate-400 mt-2 italic">Tối thiểu 1 phút để nhận thưởng.</p>
-                                </div>
+                                    <p className="text-xs text-slate-400 mt-2 italic text-center">Tối thiểu 1 phút để nhận thưởng.</p>
+                                </>
                             ) : (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     <div className="bg-white border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all group">
