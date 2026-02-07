@@ -222,12 +222,19 @@ class KeyManager {
         usage.failedAttempts = (usage.failedAttempts || 0) + 1;
 
         if (statusCode === 429) {
-            // Smart Backoff: 15s, 1m, 5m, 15m
-            const backoffMsValues = [15000, 60000, 300000, 900000];
+            // Smart Backoff: Differentiate Paid vs Free
+            const isPaid = usage.rpmLimit > 100;
+
+            // Paid: 1s, 2s, 5s, 10s (Aggressive retry for burst limits)
+            // Free: 15s, 1m, 5m, 15m (Conservative to avoid ban)
+            const backoffMsValues = isPaid
+                ? [1000, 2000, 5000, 10000]
+                : [15000, 60000, 300000, 900000];
+
             const index = Math.min(usage.failedAttempts - 1, 3);
             const backoffMs = backoffMsValues[index];
 
-            console.warn(`⚠️ Key ...${key.slice(-5)} hit Rate Limit (429). Fail #${usage.failedAttempts}. Cooling for ${backoffMs / 1000}s.`);
+            console.warn(`⚠️ Key ...${key.slice(-5)} hit Rate Limit (429). Fail #${usage.failedAttempts}. Cooling for ${backoffMs / 1000}s. (Paid: ${isPaid})`);
             usage.cooldownUntil = Date.now() + backoffMs;
         }
         else if (statusCode === 400 || statusCode === 403 || statusCode === 500 || statusCode === 404) {
@@ -295,7 +302,7 @@ export const generateText = async (prompt: string): Promise<string> => {
             const genAI = new GoogleGenerativeAI(key);
 
             // REVERT: Force Model 2.5 Flash as requested
-            const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash"; // Fixed to 1.5-flash
+            const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
             const model = genAI.getGenerativeModel({
                 model: modelName,
                 generationConfig: {
