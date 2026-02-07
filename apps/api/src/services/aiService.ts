@@ -36,35 +36,20 @@ class KeyManager {
     async initialize() {
         if (this.initialized && this.keys.size > 0) return;
 
-        let rawKeyList: string[] = [];
-
-        // 1. Try DB
+        // 1. Try DB (Free/Standard Keys)
+        let dbFreeKeys: string[] = [];
         try {
             const dbKey = await db.query.systemSettings.findFirst({
                 where: eq(systemSettings.key, "GEMINI_API_KEY")
             });
             if (dbKey && dbKey.value) {
-                rawKeyList = dbKey.value.split(",").map(k => k.trim()).filter(k => k.length > 0);
+                dbFreeKeys = dbKey.value.split(/[,\n]+/).map(k => k.trim()).filter(k => k.length > 0);
             }
         } catch (e) {
             console.warn("⚠️ Failed to fetch keys from DB:", e);
         }
 
-        // 2. Try Env
-        const envKeys = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "")
-            .split(/[,\n]+/)
-            .map(k => k.trim().replace(/^['"]|['"]$/g, ''))
-            .filter(k => k.length > 0 && !k.startsWith("#"));
-
-        // Merge unique
-        const allKeys = Array.from(new Set([...rawKeyList, ...envKeys]));
-
-        if (allKeys.length === 0) {
-            console.error("❌ No GEMINI_API_KEYS found!");
-        }
-
-        // Initialize state for new keys
-        // Check for Paid Keys Env & DB
+        // 2. Try DB (Paid Keys) - Load BEFORE merging
         let dbPaidKeys: string[] = [];
         try {
             const dbPaid = await db.query.systemSettings.findFirst({
@@ -77,11 +62,21 @@ class KeyManager {
             console.warn("⚠️ Failed to fetch paid keys from DB", e);
         }
 
+        // 3. Env Keys
+        const envFreeKeys = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "")
+            .split(/[,\n]+/)
+            .map(k => k.trim().replace(/^['"]|['"]$/g, ''))
+            .filter(k => k.length > 0 && !k.startsWith("#"));
+
         const envPaidKeys = (process.env.GEMINI_PAID_KEYS || "")
             .split(/[,\n]+/)
             .map(k => k.trim().replace(/^['"]|['"]$/g, ''))
             .filter(k => k.length > 0);
 
+        // 4. Merge ALL unique keys (Fix: Now includes Paid Keys!)
+        const allKeys = Array.from(new Set([...dbFreeKeys, ...envFreeKeys, ...dbPaidKeys, ...envPaidKeys]));
+
+        // 5. Track Paid Keys for Limit Check
         const paidKeysSet = new Set([...dbPaidKeys, ...envPaidKeys]);
 
         allKeys.forEach(k => {
@@ -210,7 +205,7 @@ class KeyManager {
     /**
      * Report usage result to optimize state
      */
-    public reportResult(key: string, success: boolean, statusCode?: number, forcedRetryMs?: number) {
+    public reportResult(key: string, success: boolean, statusCode?: number, forcedRetryMs?: number, isQuotaExhausted?: boolean) {
         const usage = this.keys.get(key);
         if (!usage) return;
 
@@ -220,6 +215,17 @@ class KeyManager {
         }
 
         usage.failedAttempts = (usage.failedAttempts || 0) + 1;
+
+        if (isQuotaExhausted) {
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 0, 0, 0); // Midnight next day
+            const msUntilTomorrow = tomorrow.getTime() - Date.now();
+
+            console.warn(`🛑 Key ...${key.slice(-5)} EXHAUSTED DAILY QUOTA. Muting for ${(msUntilTomorrow / 1000 / 3600).toFixed(1)}h (until midnight).`);
+            usage.cooldownUntil = tomorrow.getTime();
+            return;
+        }
 
         if (forcedRetryMs && forcedRetryMs > 0) {
             console.warn(`⏳ Key ...${key.slice(-5)} Explicit Retry-After: ${(forcedRetryMs / 1000).toFixed(2)}s from Google.`);
@@ -383,7 +389,10 @@ export const generateText = async (prompt: string): Promise<string> => {
                 } catch (e) { }
             }
 
-            if (key) keyManager.reportResult(key, false, code, retryMs);
+            const isQuotaExhausted = error.message?.includes("Quota exceeded") ||
+                JSON.stringify(error).includes("quotaMetric");
+
+            if (key) keyManager.reportResult(key, false, code, retryMs, isQuotaExhausted);
 
             // Don't sleep here, just continue to next attempt (which will use next key)
             // But wait a tiny bit to prevent tight loop if all keys are bad
