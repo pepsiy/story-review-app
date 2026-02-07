@@ -261,6 +261,7 @@ export const inventory = pgTable('inventory', {
     itemId: text('item_id').notNull(), // 'seed_carrot', 'herb_linh_thao'
     quantity: integer('quantity').default(0).notNull(),
     type: text('type').notNull(), // 'SEED', 'PRODUCT', 'CONSUMABLE'
+    isEquipped: boolean('is_equipped').default(false), // For RPG equipment
 }, (table) => {
     return {
         userItemIdx: index('user_item_idx').on(table.userId, table.itemId),
@@ -604,13 +605,3 @@ export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
         references: [users.id],
     }),
 }));
-
-// Game Inventory Table
-export const inventory = pgTable('inventory', {
-    id: serial('id').primaryKey(),
-    userId: text('user_id').notNull(),
-    itemId: text('item_id').notNull(),
-    quantity: integer('quantity').notNull().default(1),
-    type: text('type').notNull(), // SEED, CROP, ITEM, WEAPON, ARMOR, ACCESSORY  
-    isEquipped: boolean('is_equipped').default(false),
-});
