@@ -339,6 +339,19 @@ export const generateText = async (prompt: string): Promise<string> => {
 
         } catch (error: any) {
             console.error(`❌ AI Error (Attempt ${attempts}):`, error.message);
+
+            // --- DEEP DEBUG LOGGING ---
+            console.error("🔍 RAW ERROR DETAILS:");
+            if (error.response) console.error("   - Response:", JSON.stringify(error.response, null, 2));
+            if (error.headers) console.error("   - Headers:", JSON.stringify(error.headers, null, 2));
+            if (error.statusText) console.error("   - StatusText:", error.statusText);
+            // Log full object structure
+            try {
+                const jsonObj = JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
+                console.error("   - Full Info:", jsonObj);
+            } catch (e) { console.error("   - Could not stringify error object"); }
+            // --------------------------
+
             let code = 500;
             if (error.message?.includes("429")) code = 429;
             if (error.status === 403) code = 403;
