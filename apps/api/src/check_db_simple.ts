@@ -10,7 +10,7 @@ async function main() {
     try {
         const skillCount = await db.select({ count: sql<number>`count(*)` }).from(skills);
         console.log(`✅ Table 'skills' exists. Row count: ${skillCount[0].count}`);
-    } catch (e) {
+    } catch (e: any) {
         console.log(`❌ Table 'skills' check failed: ${e.message}`);
     }
 
@@ -18,7 +18,7 @@ async function main() {
         // Check new column 'mana' in beasts by selecting it
         const beast = await db.select({ id: beasts.id, mana: beasts.mana }).from(beasts).limit(1);
         console.log(`✅ Table 'beasts' has 'mana' column. Sample:`, beast[0]);
-    } catch (e) {
+    } catch (e: any) {
         console.log(`❌ Table 'beasts' column check failed: ${e.message}`);
     }
 

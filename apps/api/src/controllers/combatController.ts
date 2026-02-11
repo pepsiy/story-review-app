@@ -62,7 +62,8 @@ export const startCombat = async (req: Request, res: Response) => {
 
         // Create combat session
         const sessionId = randomUUID();
-        await db.insert(combatSessions).values({
+        // Drizzle insert type workaround
+        const newSession = {
             id: sessionId,
             userId,
             enemyId,
@@ -75,13 +76,14 @@ export const startCombat = async (req: Request, res: Response) => {
             playerBuffs: JSON.stringify([]),
             playerCooldowns: JSON.stringify({}),
             enemyBuffs: JSON.stringify([]),
-            enumyCooldowns: JSON.stringify({}),
+            enemyCooldowns: JSON.stringify({}),
             combatLog: JSON.stringify([{
                 turn: 0,
                 message: `Bạn gặp ${enemy.name}! Chiến đấu bắt đầu!`,
                 type: 'system'
             }])
-        });
+        };
+        await db.insert(combatSessions).values(newSession as any);
 
         // Fetch player's equipped skills
         const equippedSkills = await db.query.userSkills.findMany({
@@ -101,8 +103,8 @@ export const startCombat = async (req: Request, res: Response) => {
                 maxHp: user.maxHealth,
                 mana: user.mana || user.maxMana,
                 maxMana: user.maxMana,
-                attack: user.statStr * 2, // STR = attack
-                defense: user.statVit, // VIT = defense
+                attack: (user.statStr || 0) * 2, // STR = attack
+                defense: user.statVit || 0, // VIT = defense
                 critRate: user.critRate || 5,
                 critDamage: user.critDamage || 150,
                 dodgeRate: user.dodgeRate || 5,
@@ -177,11 +179,11 @@ export const processCombatAction = async (req: Request, res: Response) => {
         // Build combat stats
         const playerStats: CombatStats = {
             hp: playerHp,
-            maxHp: user.maxHealth,
-            mana: playerMana,
-            maxMana: user.maxMana,
-            attack: user.statStr * 2,
-            defense: user.statVit,
+            maxHp: user.maxHealth || 100,
+            mana: playerMana || 0,
+            maxMana: user.maxMana || 100,
+            attack: (user.statStr || 0) * 2,
+            defense: user.statVit || 0,
             critRate: user.critRate || 5,
             critDamage: user.critDamage || 150,
             dodgeRate: user.dodgeRate || 5,
@@ -261,8 +263,8 @@ export const processCombatAction = async (req: Request, res: Response) => {
             }
 
             // Set cooldown
-            if (skillData.cooldown > 0) {
-                playerCooldowns[skillId] = skillData.cooldown;
+            if ((skillData.cooldown || 0) > 0) {
+                playerCooldowns[skillId] = skillData.cooldown || 0;
             }
 
             playerActionLog = {
@@ -283,9 +285,9 @@ export const processCombatAction = async (req: Request, res: Response) => {
             const fleeSuccess = Math.random() < 0.5;
             if (fleeSuccess) {
                 // Penalty: Lose 5% current EXP
-                const expLoss = Math.floor(user.cultivationExp * 0.05);
+                const expLoss = Math.floor((user.cultivationExp || 0) * 0.05);
                 await db.update(users)
-                    .set({ cultivationExp: Math.max(0, user.cultivationExp - expLoss) })
+                    .set({ cultivationExp: Math.max(0, (user.cultivationExp || 0) - expLoss) })
                     .where(eq(users.id, user.id));
 
                 await db.update(combatSessions)
@@ -317,13 +319,13 @@ export const processCombatAction = async (req: Request, res: Response) => {
                 .where(eq(combatSessions.id, sessionId));
 
             // Calculate rewards
-            const rewards = calculateCombatRewards(1, 'normal', user.cultivationLevel || 0);
+            const rewards = calculateCombatRewards(1, 'normal', Number(user.cultivationLevel || 0));
             const skillBookDrop = generateSkillBookDrop('normal', enemy.element, []); // Need to pass all skill books
 
             // Update user
             await db.update(users).set({
-                gold: user.gold + rewards.gold,
-                cultivationExp: user.cultivationExp + rewards.exp
+                gold: (user.gold || 0) + rewards.gold,
+                cultivationExp: (user.cultivationExp || 0) + rewards.exp
             }).where(eq(users.id, user.id));
 
             return res.json({
@@ -348,7 +350,7 @@ export const processCombatAction = async (req: Request, res: Response) => {
             with: { skill: true }
         });
 
-        const enemySkillsForAI: EnemySkillConfig[] = enemySkillConfigs.map(es => ({
+        const enemySkillsForAI: EnemySkillConfig[] = enemySkillConfigs.map((es: any) => ({
             skill: {
                 id: es.skill.id,
                 name: es.skill.name,
@@ -358,19 +360,19 @@ export const processCombatAction = async (req: Request, res: Response) => {
                 effects: es.skill.effects ? JSON.parse(es.skill.effects) : undefined
             },
             usageRate: es.usageRate,
-            minTurn: es.minTurn
+            minTurn: (es.minTurn === null) ? 1 : es.minTurn
         }));
 
         const aiDecision = decideEnemyAction(
             enemyStats,
             playerStats,
             enemySkillsForAI,
-            session.turn,
+            session.turn || 1,
             enemy.aiPattern as AIPattern || 'balanced',
             enemyCooldowns
         );
 
-        let enemyActionLog: any = { turn: session.turn, actor: 'enemy' };
+        let enemyActionLog: any = { turn: session.turn || 1, actor: 'enemy' };
 
         if (aiDecision.action === 'attack') {
             const enemyStatsWithBuffs = applyBuffsToStats(enemyStats, enemyBuffs);
@@ -427,9 +429,9 @@ export const processCombatAction = async (req: Request, res: Response) => {
                 .where(eq(combatSessions.id, sessionId));
 
             // Penalty: Lose 10% EXP
-            const expLoss = Math.floor(user.cultivationExp * 0.10);
+            const expLoss = Math.floor((user.cultivationExp || 0) * 0.10);
             await db.update(users).set({
-                cultivationExp: Math.max(0, user.cultivationExp - expLoss),
+                cultivationExp: Math.max(0, (user.cultivationExp || 0) - expLoss),
                 currentHealth: user.maxHealth // Respawn with full HP
             }).where(eq(users.id, user.id));
 
@@ -455,7 +457,7 @@ export const processCombatAction = async (req: Request, res: Response) => {
 
         // === UPDATE SESSION ===
         await db.update(combatSessions).set({
-            turn: session.turn + 1,
+            turn: (session.turn || 0) + 1,
             playerHp,
             playerMana,
             enemyHp,
@@ -470,7 +472,7 @@ export const processCombatAction = async (req: Request, res: Response) => {
 
         return res.json({
             result: 'continue',
-            turn: session.turn + 1,
+            turn: (session.turn || 0) + 1,
             playerHp,
             playerMana,
             enemyHp,

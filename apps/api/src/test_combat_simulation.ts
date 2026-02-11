@@ -31,13 +31,13 @@ async function main() {
     console.log(`🐺 Beast: ${beast.name} (HP: ${beast.health})`);
 
     // 3. Init Stats
-    let playerHp = user.currentHealth || user.maxHealth;
+    let playerHp = user.currentHealth || user.maxHealth || 100;
     let enemyHp = beast.health;
 
     // Ensure stats are not null
     const playerStats: CStats = {
         hp: playerHp,
-        maxHp: user.maxHealth,
+        maxHp: user.maxHealth || 100,
         mana: user.mana || 100,
         maxMana: user.maxMana || 100,
         attack: (user.statStr || 10) * 2,

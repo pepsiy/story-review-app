@@ -28,7 +28,7 @@ export const getUserSkills = async (req: Request, res: Response) => {
         });
 
         // Extract equipped slots (1-4)
-        const equippedSlots = [null, null, null, null];
+        const equippedSlots: (string | null)[] = [null, null, null, null];
         learnedSkills.forEach(us => {
             if (us.equippedSlot !== null && us.equippedSlot >= 1 && us.equippedSlot <= 4) {
                 equippedSlots[us.equippedSlot - 1] = us.skillId;

@@ -710,3 +710,42 @@ export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
         references: [users.id],
     }),
 }));
+
+// Phase 33 Relations
+
+export const userSkillsRelations = relations(userSkills, ({ one }) => ({
+    user: one(users, {
+        fields: [userSkills.userId],
+        references: [users.id],
+    }),
+    skill: one(skills, {
+        fields: [userSkills.skillId],
+        references: [skills.id],
+    }),
+}));
+
+export const skillsRelations = relations(skills, ({ many }) => ({
+    userSkills: many(userSkills),
+    skillBooks: many(skillBooks),
+}));
+
+export const skillBooksRelations = relations(skillBooks, ({ one }) => ({
+    skill: one(skills, {
+        fields: [skillBooks.skillId],
+        references: [skills.id],
+    }),
+}));
+
+export const enemySkillsRelations = relations(enemySkills, ({ one }) => ({
+    skill: one(skills, {
+        fields: [enemySkills.skillId],
+        references: [skills.id],
+    }),
+}));
+
+export const combatSessionsRelations = relations(combatSessions, ({ one }) => ({
+    user: one(users, {
+        fields: [combatSessions.userId],
+        references: [users.id],
+    }),
+}));
