@@ -85,7 +85,14 @@ async function main() {
             attack: beast.attack,
             defense: beast.defense,
             icon: beast.icon,
-            lootTable: JSON.stringify(beast.lootTable)
+            lootTable: JSON.stringify(beast.lootTable),
+            // Phase 33 Stats
+            mana: beast.mana || 20,
+            maxMana: beast.maxMana || 20,
+            critRate: beast.critRate || 5,
+            dodgeRate: beast.dodgeRate || 5,
+            element: beast.element || 'WOOD',
+            aiPattern: beast.aiPattern || 'balanced'
         }).onConflictDoUpdate({
             target: beasts.id,
             set: {
@@ -95,7 +102,14 @@ async function main() {
                 attack: beast.attack,
                 defense: beast.defense,
                 icon: beast.icon,
-                lootTable: JSON.stringify(beast.lootTable)
+                lootTable: JSON.stringify(beast.lootTable),
+                // Phase 33 Stats
+                mana: beast.mana || 20,
+                maxMana: beast.maxMana || 20,
+                critRate: beast.critRate || 5,
+                dodgeRate: beast.dodgeRate || 5,
+                element: beast.element || 'WOOD',
+                aiPattern: beast.aiPattern || 'balanced'
             }
         });
     }

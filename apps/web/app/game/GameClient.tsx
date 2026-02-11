@@ -9,6 +9,8 @@ import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import StoryTab from "@/components/game/StoryTab";
 import { AFKCombatOverlay } from "@/components/game/AFKCombatOverlay";
+import { SkillsTab } from "@/components/game/SkillsTab";
+import { CombatModal } from "@/components/game/CombatModal";
 
 // Types
 type Plot = {
@@ -60,6 +62,7 @@ type Mission = {
     requiredQuantity?: number;
     rewardGold: number;
     rewardExp: number;
+    requiredItemName?: string;
 };
 
 type UserMission = {
@@ -149,6 +152,8 @@ type TierInfo = {
     icon: string;
     minPoints: number;
     currentPoints: number;
+    currentTier?: any;
+    seasonWins?: number;
 };
 
 type GameState = {
@@ -224,18 +229,22 @@ export default function GameClient() {
     const [beastEncounter, setBeastEncounter] = useState<BeastEncounter | null>(null);
     const [beastModalOpen, setBeastModalOpen] = useState(false); // List of sects to join
     const [mySect, setMySect] = useState<any>(null); // Current sect info
-    const [activeTab, setActiveTab] = useState<'FARM' | 'STORY' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS' | 'LEADERBOARD' | 'SECT' | 'PVP' | 'CHARACTER' | 'TRAINING'>('STORY');
+    const [activeTab, setActiveTab] = useState<'FARM' | 'STORY' | 'SHOP' | 'ALCHEMY' | 'MISSIONS' | 'LOGS' | 'LEADERBOARD' | 'SECT' | 'PVP' | 'CHARACTER' | 'TRAINING' | 'SKILLS'>('STORY');
 
     // Phase 25: Character RPG
     const [character, setCharacter] = useState<CharacterProfile | null>(null);
     const [trainingState, setTrainingState] = useState<any>(null); // Local state for training UI
+
+    // Phase 33: Turn-Based Combat
+    const [showCombatModal, setShowCombatModal] = useState(false);
+    const [activeEnemyId, setActiveEnemyId] = useState<string | null>(null);
 
     // PVP State
     const [pvpSubTab, setPvpSubTab] = useState<'RAID' | 'ARENA'>('RAID');
     const [raidLogs, setRaidLogs] = useState<RaidLog[]>([]);
     const [protection, setProtection] = useState<any>(null);
     const [arenaBattles, setArenaBattles] = useState<ArenaBattle[]>([]);
-    const [myTier, setMyTier] = useState<any>(null);
+    const [myTier, setMyTier] = useState<TierInfo | null>(null);
     const [arenaOpponent, setArenaOpponent] = useState<any>(null);
     const [arenaBattleLog, setArenaBattleLog] = useState<any[]>([]);
     const [arenaResult, setArenaResult] = useState<any>(null);
@@ -365,22 +374,14 @@ export default function GameClient() {
     };
 
     // COMBAT ACTIONS
-    const startCombat = async (type: 'PVE', targetId: string) => {
+    const startCombat = (type: 'PVE', targetId: string) => {
         if (!session?.user?.id) return;
-        try {
-            const res = await fetch(`${API_URL}/game/combat/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: session.user.id, type, targetId })
-            });
-            const data = await res.json();
-            if (data.success) {
-                toast.success("Vào trận chiến!");
-                fetchState(); // Should update combatStatus to IN_COMBAT
-            } else {
-                toast.error(data.error);
-            }
-        } catch (e) { toast.error("Lỗi kết nối combat"); }
+        if (type === 'PVE') {
+            setActiveEnemyId(targetId);
+            setShowCombatModal(true);
+        } else {
+            toast.info("Tính năng đang phát triển");
+        }
     };
 
     const combatAction = async (action: 'ATTACK' | 'SKILL' | 'FLEE') => {
@@ -917,19 +918,15 @@ export default function GameClient() {
             const data = await res.json();
 
             if (res.ok) {
-                toast({
-                    title: data.success ? "⚔️ Đánh Cướp Thành Công!" : "🛡️ Đánh Cướp Thất Bại!",
-                    description: data.message,
-                    variant: data.success ? "default" : "destructive",
-                });
+                if (data.success) {
+                    toast.success("⚔️ Đánh Cướp Thành Công!", { description: data.message });
+                } else {
+                    toast.error("🛡️ Đánh Cướp Thất Bại!", { description: data.message });
+                }
                 fetchState(); // Update gold
                 fetchPvpStatus(); // Update logs
             } else {
-                toast({
-                    title: "Lỗi",
-                    description: data.error,
-                    variant: "destructive"
-                });
+                toast.error("Lỗi", { description: data.error });
             }
         } catch (e) {
             console.error(e);
@@ -954,6 +951,7 @@ export default function GameClient() {
     };
 
     const findArenaMatch = async () => {
+        if (!state?.user?.id) return;
         try {
             setArenaOpponent(null);
             setArenaResult(null);
@@ -962,7 +960,7 @@ export default function GameClient() {
             const res = await fetch(`${API_URL}/game/arena/find-match`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId: state.user.id })
+                body: JSON.stringify({ userId: state?.user?.id })
             });
             const data = await res.json();
 
@@ -970,7 +968,7 @@ export default function GameClient() {
                 setArenaOpponent(data.opponent);
                 setArenaModalOpen(true);
             } else {
-                toast({ title: "Không tìm thấy đối thủ", description: data.error, variant: "destructive" });
+                toast.error("Không tìm thấy đối thủ", { description: data.error });
             }
         } catch (e) {
             console.error(e);
@@ -1298,13 +1296,19 @@ export default function GameClient() {
                     >
                         <User className="w-4 h-4" /> Hồ Sơ
                     </button>
+                    <button
+                        onClick={() => setActiveTab('SKILLS')}
+                        className={`px-4 py-2 rounded-t-lg font-bold flex items-center gap-2 whitespace-nowrap transition-colors ${activeTab === 'SKILLS' ? 'bg-white text-cyan-700 shadow-sm' : 'bg-cyan-800/10 text-cyan-800 hover:bg-cyan-800/20'}`}
+                    >
+                        <Zap className="w-4 h-4" /> Kỹ Năng
+                    </button>
                 </div>
 
                 {/* Main Content Area */}
                 <div className="bg-white rounded-b-xl rounded-tr-xl shadow-lg p-6 min-h-[400px]">
 
-                    {activeTab === 'STORY' && (
-                        <StoryTab userId={session!.user.id} onCombatStart={(enemyId) => startCombat({ type: 'PVE', targetId: enemyId })} />
+                    {activeTab === 'STORY' && session?.user?.id && (
+                        <StoryTab userId={session.user.id as string} onCombatStart={(enemyId) => startCombat('PVE', enemyId)} />
                     )}
 
                     {activeTab === 'FARM' && (
@@ -1756,144 +1760,120 @@ export default function GameClient() {
                     )}
 
                     {/* PVP Tab */}
-                    {activeTab === 'PVP' && (
+                    {pvpSubTab === 'RAID' && (
                         <div className="space-y-6">
-                            <div className="flex gap-2 border-b border-slate-200 pb-2">
-                                <Button
-                                    size="sm"
-                                    variant={pvpSubTab === 'RAID' ? 'default' : 'ghost'}
-                                    onClick={() => setPvpSubTab('RAID')}
-                                    className={pvpSubTab === 'RAID' ? 'bg-red-600 text-white' : 'text-slate-600'}
-                                >
-                                    🏴‍☠️ Đánh Cướp
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant={pvpSubTab === 'ARENA' ? 'default' : 'ghost'}
-                                    onClick={() => setPvpSubTab('ARENA')}
-                                    className={pvpSubTab === 'ARENA' ? 'bg-orange-600 text-white' : 'text-slate-600'}
-                                >
-                                    ⚔️ Lôi Đài
+                            {/* Protection Status */}
+                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 flex justify-between items-center">
+                                <div>
+                                    <div className="font-bold text-blue-800 flex items-center gap-2">
+                                        🛡️ Hộ Thể Kim Quang
+                                    </div>
+                                    <div className="text-sm text-blue-600">
+                                        {protection?.protectedUntil ? (
+                                            `Đang được bảo vệ đến ${new Date(protection.protectedUntil).toLocaleString()}`
+                                        ) : (
+                                            "Bạn chưa có bảo hộ. Có thể bị tấn công bất cứ lúc nào!"
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="text-right text-xs">
+                                    <div className="font-bold">Lượt cướp còn lại: {3 - (protection?.raidsToday || 0)}/3</div>
+                                    <div className="text-slate-500">Hồi phục lúc 00:00</div>
+                                </div>
+                            </div>
+
+                            {/* Raid Action */}
+                            <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                                <h4 className="font-bold text-slate-700 mb-3">Tìm Mục Tiêu</h4>
+                                <div className="flex gap-2">
+                                    <input id="raidTargetId" type="text" placeholder="Nhập ID người chơi..." className="flex-1 border rounded p-2 text-sm" />
+                                    <Button variant="destructive" onClick={() => {
+                                        const target = (document.getElementById('raidTargetId') as HTMLInputElement).value;
+                                        handleRaid(target);
+                                    }}>Cướp!</Button>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-2 italic">* Cướp sẽ tốn 1000 vàng và có tỷ lệ thất bại nếu đối phương mạnh hơn.</p>
+                            </div>
+
+                            {/* Raid History */}
+                            <div>
+                                <h4 className="font-bold text-slate-700 mb-3">Lịch Sử Cướp Bóc</h4>
+                                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                                    {raidLogs?.map(log => (
+                                        <div key={log.id} className={`p-3 rounded border text-sm flex justify-between items-center ${log.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                                            <div>
+                                                <span className="font-bold">{log.attackerId === state.user.id ? 'Bạn tấn công' : 'Bị tấn công bởi'}</span>
+                                                <span className="mx-1 text-slate-500">{log.attackerId === state.user.id ? log.victimId : log.attackerId}</span>
+                                            </div>
+                                            <div className="font-bold">
+                                                {log.success ? <span className="text-green-600">+{log.goldStolen} Gold</span> : <span className="text-red-500">Thất bại</span>}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400">
+                                                {new Date(log.createdAt).toLocaleString()}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ARENA SUB-TAB */}
+                    {pvpSubTab === 'ARENA' && (
+                        <div className="space-y-6">
+                            {/* My Rank Info */}
+                            <div className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-6 rounded-xl shadow-lg flex justify-between items-center">
+                                <div>
+                                    <div className="text-sm opacity-90">Hạng Hiện Tại</div>
+                                    <div className="text-3xl font-bold flex items-center gap-2">
+                                        {myTier?.currentTier?.icon} {myTier?.currentTier?.tier}
+                                    </div>
+                                    <div className="text-xs mt-1 bg-white/20 px-2 py-1 rounded inline-block">
+                                        Điểm: {myTier?.currentTier?.currentPoints || 0}
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-2xl font-bold">{myTier?.seasonWins || 0}</div>
+                                    <div className="text-xs opacity-80">Trận Thắng Mùa Này</div>
+                                </div>
+                            </div>
+
+                            {/* Find Match */}
+                            <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-300">
+                                <div className="text-4xl mb-4">⚔️</div>
+                                <h3 className="text-xl font-bold text-slate-700 mb-2">Lôi Đài Tranh Bá</h3>
+                                <p className="text-slate-500 mb-6 max-w-sm mx-auto">Tìm đối thủ có sức mạnh tương đương để so tài. Chiến thắng nhận Vàng, EXP và Điểm Xếp Hạng.</p>
+                                <Button size="lg" className="bg-orange-600 hover:bg-orange-700 font-bold px-8 shadow-lg shadow-orange-200" onClick={findArenaMatch}>
+                                    Tìm Đối Thủ
                                 </Button>
                             </div>
 
-                            {/* RAID SUB-TAB */}
-                            {pvpSubTab === 'RAID' && (
-                                <div className="space-y-6">
-                                    {/* Protection Status */}
-                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 flex justify-between items-center">
-                                        <div>
-                                            <div className="font-bold text-blue-800 flex items-center gap-2">
-                                                🛡️ Hộ Thể Kim Quang
-                                            </div>
-                                            <div className="text-sm text-blue-600">
-                                                {protection?.protectedUntil ? (
-                                                    `Đang được bảo vệ đến ${new Date(protection.protectedUntil).toLocaleString()}`
-                                                ) : (
-                                                    "Bạn chưa có bảo hộ. Có thể bị tấn công bất cứ lúc nào!"
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="text-right text-xs">
-                                            <div className="font-bold">Lượt cướp còn lại: {3 - (protection?.raidsToday || 0)}/3</div>
-                                            <div className="text-slate-500">Hồi phục lúc 00:00</div>
-                                        </div>
-                                    </div>
-
-                                    {/* Raid Action */}
-                                    <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-                                        <h4 className="font-bold text-slate-700 mb-3">Tìm Mục Tiêu</h4>
-                                        <div className="flex gap-2">
-                                            <input id="raidTargetId" type="text" placeholder="Nhập ID người chơi..." className="flex-1 border rounded p-2 text-sm" />
-                                            <Button variant="destructive" onClick={() => {
-                                                const target = (document.getElementById('raidTargetId') as HTMLInputElement).value;
-                                                handleRaid(target);
-                                            }}>Cướp!</Button>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-2 italic">* Cướp sẽ tốn 1000 vàng và có tỷ lệ thất bại nếu đối phương mạnh hơn.</p>
-                                    </div>
-
-                                    {/* Raid History */}
-                                    <div>
-                                        <h4 className="font-bold text-slate-700 mb-3">Lịch Sử Cướp Bóc</h4>
-                                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                                            {raidLogs?.map(log => (
-                                                <div key={log.id} className={`p-3 rounded border text-sm flex justify-between items-center ${log.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                            {/* Battle History */}
+                            <div>
+                                <h4 className="font-bold text-slate-700 mb-3">Lịch Sử Đấu Trường</h4>
+                                <div className="space-y-2">
+                                    {arenaBattles.map(battle => {
+                                        const isWinner = battle.winnerId === state.user.id;
+                                        return (
+                                            <div key={battle.id} className={`p-3 rounded flex justify-between items-center border ${isWinner ? 'bg-yellow-50 border-yellow-200' : 'bg-slate-50 border-slate-200'}`}>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="text-xl">{isWinner ? '🏆' : '💀'}</div>
                                                     <div>
-                                                        <span className="font-bold">{log.attackerId === state.user.id ? 'Bạn tấn công' : 'Bị tấn công bởi'}</span>
-                                                        <span className="mx-1 text-slate-500">{log.attackerId === state.user.id ? log.victimId : log.attackerId}</span>
-                                                    </div>
-                                                    <div className="font-bold">
-                                                        {log.success ? <span className="text-green-600">+{log.goldStolen} Gold</span> : <span className="text-red-500">Thất bại</span>}
-                                                    </div>
-                                                    <div className="text-[10px] text-slate-400">
-                                                        {new Date(log.createdAt).toLocaleString()}
+                                                        <div className="font-bold text-sm">{isWinner ? 'Chiến Thắng' : 'Thất Bại'}</div>
+                                                        <div className="text-[10px] text-slate-500">vs {battle.player1Id === state.user.id ? battle.player2Id : battle.player1Id}</div>
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* ARENA SUB-TAB */}
-                            {pvpSubTab === 'ARENA' && (
-                                <div className="space-y-6">
-                                    {/* My Rank Info */}
-                                    <div className="bg-gradient-to-r from-orange-500 to-red-600 text-white p-6 rounded-xl shadow-lg flex justify-between items-center">
-                                        <div>
-                                            <div className="text-sm opacity-90">Hạng Hiện Tại</div>
-                                            <div className="text-3xl font-bold flex items-center gap-2">
-                                                {myTier?.currentTier?.icon} {myTier?.currentTier?.tier}
-                                            </div>
-                                            <div className="text-xs mt-1 bg-white/20 px-2 py-1 rounded inline-block">
-                                                Điểm: {myTier?.currentTier?.currentPoints || 0}
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="text-2xl font-bold">{myTier?.seasonWins || 0}</div>
-                                            <div className="text-xs opacity-80">Trận Thắng Mùa Này</div>
-                                        </div>
-                                    </div>
-
-                                    {/* Find Match */}
-                                    <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-300">
-                                        <div className="text-4xl mb-4">⚔️</div>
-                                        <h3 className="text-xl font-bold text-slate-700 mb-2">Lôi Đài Tranh Bá</h3>
-                                        <p className="text-slate-500 mb-6 max-w-sm mx-auto">Tìm đối thủ có sức mạnh tương đương để so tài. Chiến thắng nhận Vàng, EXP và Điểm Xếp Hạng.</p>
-                                        <Button size="lg" className="bg-orange-600 hover:bg-orange-700 font-bold px-8 shadow-lg shadow-orange-200" onClick={findArenaMatch}>
-                                            Tìm Đối Thủ
-                                        </Button>
-                                    </div>
-
-                                    {/* Battle History */}
-                                    <div>
-                                        <h4 className="font-bold text-slate-700 mb-3">Lịch Sử Đấu Trường</h4>
-                                        <div className="space-y-2">
-                                            {arenaBattles.map(battle => {
-                                                const isWinner = battle.winnerId === state.user.id;
-                                                return (
-                                                    <div key={battle.id} className={`p-3 rounded flex justify-between items-center border ${isWinner ? 'bg-yellow-50 border-yellow-200' : 'bg-slate-50 border-slate-200'}`}>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="text-xl">{isWinner ? '🏆' : '💀'}</div>
-                                                            <div>
-                                                                <div className="font-bold text-sm">{isWinner ? 'Chiến Thắng' : 'Thất Bại'}</div>
-                                                                <div className="text-[10px] text-slate-500">vs {battle.player1Id === state.user.id ? battle.player2Id : battle.player1Id}</div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className={`font-bold text-sm ${isWinner ? 'text-green-600' : 'text-slate-500'}`}>
-                                                                {isWinner ? '+' : ''}{battle.player1Id === state.user.id ? battle.player1Reward : battle.player2Reward} Vàng
-                                                            </div>
-                                                            <div className="text-[10px] text-slate-400">{new Date(battle.createdAt).toLocaleDateString()}</div>
-                                                        </div>
+                                                <div className="text-right">
+                                                    <div className={`font-bold text-sm ${isWinner ? 'text-green-600' : 'text-slate-500'}`}>
+                                                        {isWinner ? '+' : ''}{battle.player1Id === state.user.id ? battle.player1Reward : battle.player2Reward} Vàng
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
+                                                    <div className="text-[10px] text-slate-400">{new Date(battle.createdAt).toLocaleDateString()}</div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            )}
+                            </div>
                         </div>
                     )}
 
@@ -2224,6 +2204,10 @@ export default function GameClient() {
                             )}
                         </div>
                     )}
+
+                    {activeTab === 'SKILLS' && (
+                        <SkillsTab userId={session!.user.id} />
+                    )}
                 </div>
             </div>
 
@@ -2233,22 +2217,29 @@ export default function GameClient() {
                     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => { }}>
                         <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 relative" onClick={(e) => e.stopPropagation()}>
                             {/* Beast Info */}
-                            <div className="text-center mb-6">
-                                <div className="text-6xl mb-3">{beastEncounter.beast.icon || '👾'}</div>
-                                <h2 className="text-2xl font-bold text-red-600">{beastEncounter.beast.name}</h2>
-                                <p className="text-sm text-slate-600 mt-1">{beastEncounter.beast.description}</p>
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 className="text-xl font-bold text-red-600 flex items-center gap-2">
+                                        ⚠️ Quái Vật Xuất Hiện!
+                                    </h3>
+                                    <p className="text-slate-600">{beastEncounter.beast.name}</p>
+                                    <p className="text-xs text-slate-500 italic">{beastEncounter.beast.description}</p>
+                                </div>
+                                <div className="text-4xl animate-bounce">
+                                    {beastEncounter.beast.icon || "🐺"}
+                                </div>
                             </div>
 
                             {/* Health Bar */}
                             <div className="mb-6">
-                                <div className="flex justify-between text-xs font-medium text-slate-700 mb-1">
-                                    <span>Máu quái</span>
-                                    <span>{beastEncounter.encounter.beastHealth} / {beastEncounter.beast.health}</span>
+                                <div className="flex justify-between text-sm mb-1">
+                                    <span className="font-bold text-red-700">HP Quái Thú</span>
+                                    <span className="font-mono">{beastEncounter.encounter.beastHealth}/{beastEncounter.beast.health}</span>
                                 </div>
-                                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                                     <div
-                                        className="bg-red-500 h-full transition-all"
-                                        style={{ width: `${(beastEncounter.encounter.beastHealth / beastEncounter.beast.health) * 100}%` }}
+                                        className="h-full bg-red-600"
+                                        style={{ width: `${Math.min(100, (beastEncounter.encounter.beastHealth / beastEncounter.beast.health) * 100)}%` }}
                                     />
                                 </div>
                             </div>
@@ -2257,11 +2248,11 @@ export default function GameClient() {
                             <div className="grid grid-cols-2 gap-3 mb-6">
                                 <div className="bg-red-50 p-3 rounded-lg border border-red-100">
                                     <div className="text-xs text-slate-500 font-medium">Tấn công</div>
-                                    <div className="text-lg font-bold text-red-600">{beastEncounter.beast.attack}</div>
+                                    <div className="text-lg font-bold text-red-600">{beastEncounter?.beast?.attack}</div>
                                 </div>
                                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
                                     <div className="text-xs text-slate-500 font-medium">Phòng thủ</div>
-                                    <div className="text-lg font-bold text-blue-600">{beastEncounter.beast.defense}</div>
+                                    <div className="text-lg font-bold text-blue-600">{beastEncounter?.beast?.defense}</div>
                                 </div>
                             </div>
 
@@ -2269,7 +2260,11 @@ export default function GameClient() {
                             <div className="flex gap-3">
                                 <Button
                                     className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold"
-                                    onClick={attackBeast}
+                                    onClick={() => {
+                                        setBeastModalOpen(false);
+                                        setActiveEnemyId(beastEncounter.beast.id);
+                                        setShowCombatModal(true);
+                                    }}
                                 >
                                     ⚔️ Tấn Công
                                 </Button>
@@ -2284,8 +2279,21 @@ export default function GameClient() {
                     </div>
                 )
             }
-            {/* COMBAT MODAL */}
-            {state?.user?.combatStatus === 'IN_COMBAT' && state.user.combatState && (
+            {/* NEW TURN-BASED COMBAT MODAL */}
+            {showCombatModal && (
+                <CombatModal
+                    userId={session!.user.id}
+                    initialEnemyId={activeEnemyId || undefined}
+                    onClose={() => {
+                        setShowCombatModal(false);
+                        setActiveEnemyId(null);
+                        fetchState();
+                    }}
+                />
+            )}
+
+            {/* OLD COMBAT MODAL (Deprecated/Removed or kept for fallback?) -> Removing for now to avoid conflict */}
+            {state?.user?.combatStatus === 'IN_COMBAT_OLD' && state.user.combatState && (
                 <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[100] p-4 backdrop-blur-md">
                     <div className="max-w-4xl w-full bg-slate-900 rounded-xl overflow-hidden shadow-2xl relative border border-slate-700 flex flex-col h-[600px]">
                         {(() => {

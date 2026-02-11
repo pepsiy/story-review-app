@@ -107,10 +107,19 @@ router.post('/training/start', startTraining);
 router.post('/training/claim', claimTrainingRewards);
 router.get('/training/realtime-progress', getRealtimeProgress);
 
-// Turn-Based Combat Routes
-import { startCombat, combatAction } from "../controllers/combatController";
+// Phase 33: Turn-Based Combat Routes
+import { startCombat, processCombatAction, getCombatState } from "../controllers/combatController";
 router.post('/combat/start', startCombat);
-router.post('/combat/action', combatAction);
+router.post('/combat/action', processCombatAction);
+router.get('/combat/state/:sessionId', getCombatState);
+
+// Phase 33: Skills Management Routes
+import { getUserSkills, learnSkill, equipSkill, unequipSkill } from "../controllers/skillsController";
+router.get('/skills', getUserSkills);
+router.post('/skills/learn', learnSkill);
+router.post('/skills/equip', equipSkill);
+router.post('/skills/unequip', unequipSkill);
+
 
 // Story Mode Routes
 import { getStoryProgress, advanceStory } from "../controllers/storyController";

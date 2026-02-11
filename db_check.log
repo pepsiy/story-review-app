@@ -1,0 +1,4 @@
+🔍 Checking Database Tables...
+📂 Found Tables: 
+ERROR: ❌ Missing Tables: skills,user_skills,combat_sessions,enemy_skills,skill_books
+ERROR: ❌ 'beasts' table missing columns: mana,element,crit_rate,dodge_rate

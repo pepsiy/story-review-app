@@ -173,6 +173,14 @@ export const users = pgTable("user", {
     rankingPoints: integer("ranking_points").default(0),
     rankTier: text("rank_tier").default("BRONZE"),
     seasonWins: integer("season_wins").default(0),
+
+    // Phase 33: Turn-Based Combat Stats
+    mana: integer("mana").default(50),
+    maxMana: integer("max_mana").default(50),
+    critRate: integer("crit_rate").default(5), // Base 5%
+    critDamage: integer("crit_damage").default(150), // Base 150%
+    dodgeRate: integer("dodge_rate").default(5), // Base 5%
+    element: text("element"), // 'fire' | 'water' | 'earth' | 'wind' | 'lightning' | 'ice' | 'dark' | 'light' | null
 });
 
 export const accounts = pgTable(
@@ -408,6 +416,14 @@ export const beasts = pgTable('beasts', {
     // Visual
     icon: text('icon'), // Emoji or image URL
 
+    // Phase 33: Turn-Based Combat Stats
+    mana: integer('mana').default(20),
+    maxMana: integer('max_mana').default(20),
+    critRate: integer('crit_rate').default(2), // Enemy crit rate (lower than players)
+    dodgeRate: integer('dodge_rate').default(3),
+    element: text('element'), // Element type: 'fire' | 'water' | etc.
+    aiPattern: text('ai_pattern').default('balanced'), // 'aggressive' | 'defensive' | 'balanced'
+
     createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -545,6 +561,95 @@ export const crawlJobs = pgTable('crawl_jobs', {
 });
 
 // Bảng Crawl Chapters - Chi tiết từng chapter
+// Phase 33: Turn-Based Combat System Tables
+
+// Skills Definition
+export const skills = pgTable('skills', {
+    id: text('id').primaryKey(), // e.g., 'fire_ball_t1'
+    name: text('name').notNull(), // "Hỏa Cầu"
+    description: text('description'),
+    tier: text('tier').notNull(), // 'pham' | 'huyen' | 'dia' | 'thien' | 'than'
+    element: text('element').notNull(), // 'fire' | 'water' | 'earth' | 'wind' | 'lightning' | 'ice' | 'dark' | 'light' | 'neutral'
+    manaCost: integer('mana_cost').notNull(),
+    cooldown: integer('cooldown').default(0), // Turns
+    damageMultiplier: integer('damage_multiplier').notNull(), // Stored as integer (150 = 1.5x)
+    effects: text('effects'), // JSON string: [{type:'buff',stat:'attack',value:10,duration:3}]
+    animation: text('animation'), // Animation identifier
+    cultivationReq: integer('cultivation_req').default(0), // Min cultivation level index
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
+// User's Learned Skills
+export const userSkills = pgTable('user_skills', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    skillId: text('skill_id').references(() => skills.id).notNull(),
+    level: integer('level').default(1), // Skill mastery level 1-10
+    timesUsed: integer('times_used').default(0),
+    equippedSlot: integer('equipped_slot'), // 1-4, null = not equipped
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => {
+    return {
+        userSkillIdx: index('user_skill_idx').on(table.userId, table.skillId),
+    };
+});
+
+// Skill Books (Items)
+export const skillBooks = pgTable('skill_books', {
+    id: text('id').primaryKey(),
+    skillId: text('skill_id').references(() => skills.id).notNull(),
+    name: text('name').notNull(), // "Bí Kíp Hỏa Cầu"
+    rarity: text('rarity').notNull(), // 'pham' | 'huyen' | 'dia' | 'thien' | 'than'
+    icon: text('icon'), // Icon URL or identifier
+    description: text('description'),
+    createdAt: timestamp('created_at').defaultNow(),
+});
+
+// Active Combat Sessions
+export const combatSessions = pgTable('combat_sessions', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    enemyId: text('enemy_id').notNull(), // Beast ID
+    state: text('state').notNull().default('active'), // 'active' | 'victory' | 'defeat' | 'fled'
+    turn: integer('turn').default(1),
+
+    // Player State
+    playerHp: integer('player_hp').notNull(),
+    playerMana: integer('player_mana').notNull(),
+    playerBuffs: text('player_buffs'), // JSON array
+    playerCooldowns: text('player_cooldowns'), // JSON object {skillId: turnsRemaining}
+
+    // Enemy State
+    enemyHp: integer('enemy_hp').notNull(),
+    enemyMana: integer('enemy_mana').notNull(),
+    enemyBuffs: text('enemy_buffs'), // JSON array
+    enemyCooldowns: text('enemy_cooldowns'), // JSON object
+
+    // Log
+    combatLog: text('combat_log'), // JSON array of actions
+
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        userIdx: index('combat_user_idx').on(table.userId),
+        stateIdx: index('combat_state_idx').on(table.state),
+    };
+});
+
+// Enemy Skill Mappings
+export const enemySkills = pgTable('enemy_skills', {
+    id: serial('id').primaryKey(),
+    enemyId: text('enemy_id').notNull(), // Beast ID from beasts table
+    skillId: text('skill_id').references(() => skills.id).notNull(),
+    usageRate: integer('usage_rate').notNull(), // 0-100, AI probability
+    minTurn: integer('min_turn').default(1), // Earliest turn to use
+}, (table) => {
+    return {
+        enemyIdx: index('enemy_skill_idx').on(table.enemyId),
+    };
+});
+
 export const crawlChapters = pgTable('crawl_chapters', {
     id: serial('id').primaryKey(),
     jobId: integer('job_id').references(() => crawlJobs.id, { onDelete: 'cascade' }),

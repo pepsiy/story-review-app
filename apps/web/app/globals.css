@@ -170,3 +170,98 @@
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+/* Phase 33: Turn-Based Combat Animations */
+@keyframes damage-float {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-30px) scale(1.2);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-60px) scale(0.8);
+  }
+}
+
+@keyframes crit-flash {
+
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+
+  50% {
+    filter: brightness(2) drop-shadow(0 0 20px #fbbf24);
+  }
+}
+
+@keyframes element-spark {
+
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes spell-cast {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(0deg);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2) rotate(180deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.8) rotate(360deg);
+  }
+}
+
+@keyframes hp-drain {
+  0% {
+    transform: scaleX(1);
+  }
+
+  50% {
+    filter: brightness(1.5);
+  }
+
+  100% {
+    transform: scaleX(var(--final-width));
+  }
+}
+
+.animate-damage-float {
+  animation: damage-float 1.5s ease-out forwards;
+}
+
+.animate-crit {
+  animation: crit-flash 0.5s ease-in-out;
+}
+
+.animate-element-spark {
+  animation: element-spark 0.8s ease-out;
+}
+
+.animate-spell-cast {
+  animation: spell-cast 1s ease-out;
+}
+
+.hp-bar-transition {
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}

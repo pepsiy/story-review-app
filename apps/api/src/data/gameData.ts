@@ -142,6 +142,13 @@ export const BEASTS = [
         attack: 15,
         defense: 5,
         icon: '🐺',
+        // Phase 33 Stats
+        mana: 20,
+        maxMana: 20,
+        critRate: 10, // 10%
+        dodgeRate: 10, // 10%
+        element: 'WOOD',
+        aiPattern: 'aggressive',
         lootTable: [
             { itemId: 'herb_linh_thao', quantity: 3, chance: 0.7 },
             { itemId: 'seed_linh_chi', quantity: 1, chance: 0.3 }
@@ -155,6 +162,13 @@ export const BEASTS = [
         attack: 30,
         defense: 10,
         icon: '🐯',
+        // Phase 33 Stats
+        mana: 50,
+        maxMana: 50,
+        critRate: 15,
+        dodgeRate: 5,
+        element: 'EARTH',
+        aiPattern: 'balanced',
         lootTable: [
             { itemId: 'pill_basic', quantity: 2, chance: 0.6 },
             { itemId: 'herb_linh_thao', quantity: 5, chance: 0.5 }
@@ -168,6 +182,13 @@ export const BEASTS = [
         attack: 50,
         defense: 20,
         icon: '🐲',
+        // Phase 33 Stats
+        mana: 200,
+        maxMana: 200,
+        critRate: 20,
+        dodgeRate: 10,
+        element: 'WATER',
+        aiPattern: 'tactical',
         lootTable: [
             { itemId: 'pill_rare', quantity: 1, chance: 0.8 },
             { itemId: 'item_array_basic', quantity: 1, chance: 0.4 }
