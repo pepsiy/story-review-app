@@ -1,7 +1,7 @@
 
 import "dotenv/config";
-import { db } from '../../../packages/db/src';
-import { skills, beasts } from '../../../packages/db/src';
+import { db } from '@repo/db';
+import { skills, beasts } from '@repo/db';
 import { sql } from 'drizzle-orm';
 
 async function main() {

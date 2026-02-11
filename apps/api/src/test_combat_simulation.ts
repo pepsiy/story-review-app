@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { db } from '../../../packages/db/src';
-import { users, beasts, combatSessions, userSkills, enemySkills } from '../../../packages/db/src';
+import { db } from '@repo/db';
+import { users, beasts, combatSessions, userSkills, enemySkills } from '@repo/db';
 import { eq, and } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 

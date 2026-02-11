@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { db } from "../../../packages/db/src";
-import { works, chapters, gameItems, missions } from "../../../packages/db/src";
+import { db } from "@repo/db";
+import { works, chapters, gameItems, missions } from "@repo/db";
 import { ITEMS, RECIPES, DAILY_MISSIONS } from "./data/gameData";
 
 async function main() {
@@ -73,7 +73,7 @@ async function main() {
     console.log("✅ Seeded Missions");
 
     // 5. Seed Beasts
-    const { beasts } = await import("../../../packages/db/src");
+    const { beasts } = await import("@repo/db");
     const { BEASTS } = await import("./data/gameData");
 
     for (const beast of BEASTS) {

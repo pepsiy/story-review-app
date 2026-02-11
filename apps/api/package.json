@@ -4,7 +4,7 @@
   "main": "index.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "cd ../../packages/db && npm run build && cd ../../apps/api && tsc",
     "start": "node dist/apps/api/src/index.js",
     "seed": "tsx src/seed.ts",
     "reset": "tsx src/reset.ts"

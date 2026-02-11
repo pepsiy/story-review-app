@@ -1,5 +1,4 @@
-import "dotenv/config";
-import { db } from '../../../packages/db/src';
+import { db } from '@repo/db';
 import { sql } from 'drizzle-orm';
 import fs from 'fs';
 

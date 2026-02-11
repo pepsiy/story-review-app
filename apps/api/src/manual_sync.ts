@@ -1,5 +1,4 @@
-import { db } from "../../../packages/db/src";
-import { crawlChapters, chapters } from "../../../packages/db/src";
+import { db, crawlChapters, chapters } from '@repo/db';
 import { eq, and } from "drizzle-orm";
 
 async function manualSync() {

@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { db } from "../../../packages/db/src";
-import { works, chapters, reviews } from "../../../packages/db/src";
+import { db } from "@repo/db";
+import { users, works, chapters, gameItems, missions, reviews } from "@repo/db";
 
 async function main() {
     console.log("🔄 Resetting database (clearing works, chapters, reviews)...");
