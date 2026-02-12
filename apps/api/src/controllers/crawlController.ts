@@ -732,6 +732,53 @@ export const getActiveJobs = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get latest job for a work (regardless of status)
+ */
+export const getLatestJobForWork = async (req: Request, res: Response) => {
+    try {
+        const { workId } = req.params;
+
+        const job = await db.query.crawlJobs.findFirst({
+            where: eq(crawlJobs.workId, parseInt(workId)),
+            orderBy: (crawlJobs, { desc }) => [desc(crawlJobs.createdAt)]
+        });
+
+        if (!job) {
+            return res.status(404).json({ error: "No job found for this work" });
+        }
+
+        // Get failed chapters statistics
+        const failedCount = await db.select({ count: sql<number>`count(*)` })
+            .from(crawlChapters)
+            .where(and(
+                eq(crawlChapters.jobId, job.id),
+                eq(crawlChapters.status, 'failed')
+            ));
+
+        // Get job detailed info to return
+        const failedChaptersList = await db.query.crawlChapters.findMany({
+            where: and(
+                eq(crawlChapters.jobId, job.id),
+                eq(crawlChapters.status, 'failed')
+            ),
+            limit: 50 // Limit to avoid huge payload
+        });
+
+        res.json({
+            job: {
+                ...job,
+                failedChapters: Number(failedCount[0]?.count || 0)
+            },
+            failedChapters: failedChaptersList
+        });
+
+    } catch (error: any) {
+        console.error("Error getting latest job:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+/**
  * Test Telegram connection
  */
 export const testTelegramConnection = async (req: Request, res: Response) => {

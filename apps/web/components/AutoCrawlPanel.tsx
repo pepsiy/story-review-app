@@ -84,13 +84,13 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
 
     const checkExistingJob = async () => {
         try {
-            const res = await fetch(`${API_URL}/admin/crawl/active`);
+            // NEW: Fetch latest job for this work, regardless of status
+            const res = await fetch(`${API_URL}/admin/crawl/work/${workId}`);
             if (res.ok) {
-                const jobs = await res.json();
-                const existing = jobs.find((j: CrawlJob) => j.workId === parseInt(workId));
-                if (existing) {
-                    setJob(existing);
-                    await refreshJobStatus(existing.id);
+                const data = await res.json();
+                if (data.job) {
+                    setJob(data.job);
+                    setFailedChapters(data.failedChapters || []);
                 }
             }
         } catch (error) {
@@ -611,8 +611,8 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                     ) : (
                         logs.map((log, idx) => (
                             <div key={idx} className={`flex gap-2 ${log.type === 'error' ? 'text-red-400' :
-                                    log.type === 'success' ? 'text-green-400' :
-                                        log.type === 'warning' ? 'text-yellow-400' : 'text-gray-300'
+                                log.type === 'success' ? 'text-green-400' :
+                                    log.type === 'warning' ? 'text-yellow-400' : 'text-gray-300'
                                 }`}>
                                 <span className="text-gray-600 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
                                 <span>{log.message}</span>

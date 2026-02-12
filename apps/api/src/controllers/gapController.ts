@@ -1,108 +1,172 @@
 
 import { Request, Response } from "express";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { eq, and, asc, desc, sql } from "drizzle-orm";
 import { db } from "../../../../packages/db/src";
 import { chapters, crawlJobs, works, crawlChapters } from "../../../../packages/db/src";
 // Removed unused imports
 
+
+import { processBatchBackground } from "./crawlController";
 
 export const scanAndFixGaps = async (req: Request, res: Response) => {
     try {
         const { workId } = req.body;
         if (!workId) return res.status(400).json({ error: "Work ID required" });
 
-        // 1. Get all existing published chapters to find gaps
-        const existingChapters = await db.query.chapters.findMany({
-            where: eq(chapters.workId, workId),
-            orderBy: [asc(chapters.chapterNumber)],
-            columns: { chapterNumber: true }
-        });
-
-        if (existingChapters.length === 0) {
-            return res.json({ message: "No chapters found to scan gaps for." });
-        }
-
-        const maxChapter = existingChapters[existingChapters.length - 1].chapterNumber;
-        const existingSet = new Set(existingChapters.map(c => c.chapterNumber));
-        const missingChapters = [];
-
-        for (let i = 1; i <= maxChapter; i++) {
-            if (!existingSet.has(i)) {
-                missingChapters.push(i);
-            }
-        }
-
-        console.log(`[Gap Scan] Work ${workId}: Found ${missingChapters.length} missing chapters: ${missingChapters.join(', ')}`);
-
-        if (missingChapters.length === 0) {
-            return res.json({ success: true, message: "No gaps found.", gaps: [] });
-        }
-
-        // 2. Get Job Config to calculate source range
+        // 1. Get latest job
         const job = await db.query.crawlJobs.findFirst({
             where: eq(crawlJobs.workId, workId),
             orderBy: [desc(crawlJobs.id)]
         });
 
-        if (!job) return res.status(400).json({ error: "No crawl job found for this work" });
+        if (!job) return res.status(400).json({ error: "No crawl job found" });
 
-        const batchSize = job.batchSize || 5;
-        const triggeredFixes = [];
+        console.log(`[Gap Scan] Scanning job ${job.id} for work ${workId}...`);
 
-        // 3. Trigger fix for each missing chapter
-        for (const missingChapNum of missingChapters) {
-            // Calculate source range
-            // Example: Batch 5. Missing Chap 1 -> Source 1-5. Missing Chap 2 -> Source 6-10.
-            const startSource = (missingChapNum - 1) * batchSize + 1;
-            const endSource = missingChapNum * batchSize;
+        // 2. Find failed chapters in crawl_chapters
+        const failedChapters = await db.query.crawlChapters.findMany({
+            where: and(
+                eq(crawlChapters.jobId, job.id),
+                eq(crawlChapters.status, 'failed')
+            )
+        });
 
-            console.log(`[Gap Fix] Fixing Chapter ${missingChapNum} (Source: ${startSource}-${endSource})...`);
+        // 3. Find "stuck" chapters (summarizing/crawling for too long > 10 mins)
+        const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000);
+        const stuckChapters = await db.query.crawlChapters.findMany({
+            where: and(
+                eq(crawlChapters.jobId, job.id),
+                sql`(${crawlChapters.status} = 'crawling' OR ${crawlChapters.status} = 'summarizing')`,
+                sql`${crawlChapters.createdAt} < ${tenMinsAgo}` // approximate check
+            )
+        });
 
-            // Re-trigger crawl/summarize logic
-            // We need to verify if source crawl chapters exist, if not, create 'pending'
+        // 4. Find completely missing chapters (Compare with total limit if known, or just check sequence gaps in crawl_chapters)
+        // For now, we trust the 'failed' and 'stuck' detection mostly. 
+        // Real gaps (missing records) are harder without a known max chapter, but we can check if we have gaps in numbering.
 
-            // Loop through source range to ensure crawl_chapters exist
-            for (let sourceChap = startSource; sourceChap <= endSource; sourceChap++) {
-                // Check if exists
-                const existingSource = await db.query.crawlChapters.findFirst({
-                    where: and(
-                        eq(crawlChapters.jobId, job.id),
-                        eq(crawlChapters.chapterNumber, sourceChap)
-                    )
-                });
+        const updates = [];
+        const fixedIds = [];
 
-                if (!existingSource) {
-                    // Create if missing entirely
-                    await db.insert(crawlChapters).values({
-                        jobId: job.id,
-                        workId: workId,
-                        chapterNumber: sourceChap,
-                        sourceUrl: `${job.sourceUrl}/chuong-${sourceChap}`, // Approximation, real url might need fetch
-                        status: 'pending'
-                    });
-                } else {
-                    // Reset to pending if failed or stuck
-                    await db.update(crawlChapters)
-                        .set({ status: 'pending', error: null, retryCount: 0 })
-                        .where(eq(crawlChapters.id, existingSource.id));
-                }
+        // Fix Failed
+        for (const ch of failedChapters) {
+            updates.push(ch.id);
+        }
+
+        // Fix Stuck
+        for (const ch of stuckChapters) {
+            updates.push(ch.id);
+        }
+
+        if (updates.length > 0) {
+            // Reset to pending
+            await db.update(crawlChapters)
+                .set({
+                    status: 'pending',
+                    error: null,
+                    retryCount: 0,
+                    summarizedAt: null,
+                    summary: null
+                })
+                .where(sql`${crawlChapters.id} IN ${updates}`);
+
+            fixedIds.push(...updates);
+        }
+
+        // AUTO-TRIGGER processing if we fixed something
+        if (fixedIds.length > 0) {
+            console.log(`[Gap Fix] Reset ${fixedIds.length} chapters. Triggering batch processing...`);
+
+            // Should verify if job is not completed, if so, set to ready
+            if (job.status === 'completed' || job.status === 'failed') {
+                await db.update(crawlJobs)
+                    .set({ status: 'ready' })
+                    .where(eq(crawlJobs.id, job.id));
             }
 
-            triggeredFixes.push({
-                chapter: missingChapNum,
-                sourceRange: `${startSource}-${endSource}`
-            });
+            // Trigger background process (fire and forget)
+            processBatchBackground(job.id, 5, 'Auto-Fix Trigger');
         }
 
         res.json({
             success: true,
-            message: `Found ${missingChapters.length} gaps. Triggered fix for all.`,
-            gaps: missingChapters,
-            fixes: triggeredFixes
+            message: `Scanned. Reset ${fixedIds.length} chapters (Failed: ${failedChapters.length}, Stuck: ${stuckChapters.length}). Processing triggered.`,
+            fixedCount: fixedIds.length,
+            gaps: [] // TODO: Implement sequence gap detection if needed
         });
 
-    } catch (e) {
+    } catch (e: any) {
         console.error("Scan Gaps Error", e);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(500).json({ error: e.message });
+    }
+};
+
+export const fixRange = async (req: Request, res: Response) => {
+    try {
+        const { workId, start, end } = req.body;
+        if (!workId || !start || !end) return res.status(400).json({ error: "Missing parameters" });
+
+        const job = await db.query.crawlJobs.findFirst({
+            where: eq(crawlJobs.workId, workId),
+            orderBy: [desc(crawlJobs.id)]
+        });
+
+        if (!job) return res.status(404).json({ error: "Job not found" });
+
+        // Reset range
+        const result = await db.update(crawlChapters)
+            .set({
+                status: 'pending',
+                error: null,
+                retryCount: 0,
+                summary: null
+            })
+            .where(and(
+                eq(crawlChapters.jobId, job.id),
+                sql`${crawlChapters.chapterNumber} >= ${start}`,
+                sql`${crawlChapters.chapterNumber} <= ${end}`
+            ));
+
+        // Resume job if needed
+        await db.update(crawlJobs)
+            .set({ status: 'ready' })
+            .where(eq(crawlJobs.id, job.id));
+
+        // Trigger
+        processBatchBackground(job.id, 5, 'Manual Range Fix');
+
+        res.json({ message: `Triggered fix for range ${start}-${end}` });
+
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
+    }
+};
+
+export const retryChapter = async (req: Request, res: Response) => {
+    try {
+        const { workId, chapterNumber } = req.body;
+
+        const job = await db.query.crawlJobs.findFirst({
+            where: eq(crawlJobs.workId, workId),
+            orderBy: [desc(crawlJobs.id)]
+        });
+
+        if (!job) return res.status(404).json({ error: "Job not found" });
+
+        await db.update(crawlChapters)
+            .set({ status: 'pending', error: null, retryCount: 0 })
+            .where(and(
+                eq(crawlChapters.jobId, job.id),
+                eq(crawlChapters.chapterNumber, chapterNumber)
+            ));
+
+        // Resume job
+        await db.update(crawlJobs).set({ status: 'ready' }).where(eq(crawlJobs.id, job.id));
+
+        processBatchBackground(job.id, 1, 'Manual Retry');
+
+        res.json({ message: `Retrying chapter ${chapterNumber}` });
+    } catch (e: any) {
+        res.status(500).json({ error: e.message });
     }
 };

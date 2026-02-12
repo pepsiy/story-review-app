@@ -56,7 +56,8 @@ import {
     testTelegramConnection,
     extractWorkInfo,
     repairJob,
-    updateJobConfig
+    updateJobConfig,
+    getLatestJobForWork
 } from "../controllers/crawlController";
 router.post("/crawl/init", initCrawl);
 router.post("/crawl/extract-info", extractWorkInfo);
@@ -68,10 +69,13 @@ router.post("/crawl/:jobId/update-config", updateJobConfig); // NEW Config Route
 router.post("/crawl/:jobId/pause", pauseJob);
 router.post("/crawl/:jobId/resume", resumeJob);
 router.get("/crawl/active", getActiveJobs);
+router.get("/crawl/work/:workId", getLatestJobForWork); // NEW: Get latest job (even completed)
 router.post("/telegram/test", testTelegramConnection);
 
-import { scanAndFixGaps } from "../controllers/gapController";
+import { scanAndFixGaps, fixRange, retryChapter } from "../controllers/gapController";
 router.post("/crawl/scan-gaps", scanAndFixGaps);
+router.post("/crawl/fix-range", fixRange);
+router.post("/crawl/retry-chapter", retryChapter);
 
 // Mission Management Routes (Admin)
 import { getAllMissionsAdmin, createMission, updateMission, deleteMission } from "../controllers/missionController";
