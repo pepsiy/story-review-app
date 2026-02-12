@@ -50,6 +50,11 @@ export const ITEMS: Record<string, {
     // Special
     'item_talisman_protect': { id: 'item_talisman_protect', name: 'Hộ Thân Phù', type: ITEM_TYPES.CONSUMABLE, price: 5000, description: "Tăng 30% tỉ lệ thành công khi độ kiếp và giảm phạt thất bại.", sellPrice: 2500 },
     'item_array_basic': { id: 'item_array_basic', name: 'Trận Pháp Cơ Bản', type: ITEM_TYPES.CONSUMABLE, price: 500, description: "Bảo vệ vườn thuốc khỏi đạo tặc trong 4 giờ.", sellPrice: 50 },
+
+    // Phase 34: Elemental Items
+    'item_essence_fire': { id: 'item_essence_fire', name: 'Tinh Hoa Lửa', type: ITEM_TYPES.PRODUCT, sellPrice: 200, description: "Kết tinh của lửa, dùng để chế tạo đan dược Hỏa hệ." },
+    'item_essence_water': { id: 'item_essence_water', name: 'Tinh Hoa Nước', type: ITEM_TYPES.PRODUCT, sellPrice: 200, description: "Kết tinh của nước, dùng để chế tạo đan dược Thủy hệ." },
+    'item_sect_token': { id: 'item_sect_token', name: 'Lệnh Bài Tông Môn', type: ITEM_TYPES.ACCESSORY, price: 0, description: "Chứng nhận đệ tử tông môn, mở khóa các tính năng bang hội.", sellPrice: 0 },
 };
 
 // Recipes for Alchemy
@@ -193,6 +198,63 @@ export const BEASTS = [
             { itemId: 'pill_rare', quantity: 1, chance: 0.8 },
             { itemId: 'item_array_basic', quantity: 1, chance: 0.4 }
         ]
+    },
+    // Phase 34 Beasts
+    {
+        id: 'beast_fire_spirit',
+        name: 'Hỏa Tinh',
+        description: 'Tinh linh lửa sinh ra từ dung nham.',
+        health: 300,
+        attack: 40,
+        defense: 10,
+        icon: '🔥',
+        mana: 100,
+        maxMana: 100,
+        critRate: 20,
+        dodgeRate: 5,
+        element: 'FIRE',
+        aiPattern: 'aggressive',
+        lootTable: [
+            { itemId: 'item_essence_fire', quantity: 1, chance: 0.5 },
+            { itemId: 'herb_linh_thao', quantity: 2, chance: 0.3 }
+        ]
+    },
+    {
+        id: 'beast_water_serpent',
+        name: 'Thủy Xà',
+        description: 'Rắn nước khổng lồ ẩn mình trong hồ sâu.',
+        health: 400,
+        attack: 35,
+        defense: 15,
+        icon: '🐍',
+        mana: 80,
+        maxMana: 80,
+        critRate: 10,
+        dodgeRate: 15,
+        element: 'WATER',
+        aiPattern: 'balanced',
+        lootTable: [
+            { itemId: 'item_essence_water', quantity: 1, chance: 0.5 },
+            { itemId: 'herb_nhan_sam', quantity: 1, chance: 0.2 }
+        ]
+    },
+    {
+        id: 'beast_rival_disciple',
+        name: 'Đệ Tử Ngoại Môn',
+        description: 'Đệ tử tông môn khác đang gây sự.',
+        health: 350,
+        attack: 30,
+        defense: 20,
+        icon: '😡',
+        mana: 60,
+        maxMana: 60,
+        critRate: 15,
+        dodgeRate: 10,
+        element: 'METAL',
+        aiPattern: 'tactical',
+        lootTable: [
+            { itemId: 'item_sect_token', quantity: 1, chance: 1.0 } // Guaranteed for Quest
+        ]
     }
 ];
 
@@ -284,5 +346,36 @@ export const TRAINING_MAPS: Record<string, {
         killRate: 6,
         goldPerKill: 25,
         expPerKill: 20
+    },
+    // Phase 34 Maps
+    'map_volcano_1': {
+        id: 'map_volcano_1',
+        name: 'Vực Núi Lửa',
+        description: 'Nơi nóng bức, đầy rẫy Hỏa Tinh.',
+        reqLevel: 2, // Trúc Cơ
+        expPerMin: 60,
+        rewards: [
+            { itemId: 'item_essence_fire', chance: 0.1, quantity: 1 }
+        ],
+        enemyName: 'Hỏa Tinh',
+        enemyIcon: '🔥',
+        killRate: 8,
+        goldPerKill: 30,
+        expPerKill: 25
+    },
+    'map_ocean_1': {
+        id: 'map_ocean_1',
+        name: 'Hồ Sương Mù',
+        description: 'Hồ nước mênh mông, ẩn chứa thủy quái.',
+        reqLevel: 2, // Trúc Cơ
+        expPerMin: 60,
+        rewards: [
+            { itemId: 'item_essence_water', chance: 0.1, quantity: 1 }
+        ],
+        enemyName: 'Thủy Xà',
+        enemyIcon: '🐍',
+        killRate: 8,
+        goldPerKill: 30,
+        expPerKill: 25
     }
 };

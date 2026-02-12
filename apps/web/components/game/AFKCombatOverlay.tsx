@@ -62,10 +62,16 @@ export function AFKCombatOverlay({ userId, mapId, onComplete }: AFKCombatOverlay
                 setProgress(data);
 
                 // Check for new kills
-                if (data.totalKills > prevKillsRef.current) {
+                if (prevKillsRef.current === 0 && data.totalKills > 0) {
+                    // First load with existing kills - skip animation
+                    prevKillsRef.current = data.totalKills;
+                } else if (data.totalKills > prevKillsRef.current) {
                     const newKills = data.totalKills - prevKillsRef.current;
 
-                    for (let i = 0; i < newKills; i++) {
+                    // Limit animations if too many (e.g. heavy lag spike or tab background)
+                    const killsToAnimate = Math.min(newKills, 5);
+
+                    for (let i = 0; i < killsToAnimate; i++) {
                         // Add combat log entry
                         setCombatLog(prev => [{
                             id: `${Date.now()}-${i}`,

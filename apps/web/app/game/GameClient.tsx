@@ -277,12 +277,7 @@ export default function GameClient() {
             } else {
                 toast.error(data.error);
             }
-            if (data.success) {
-                toast.success(`Đã cộng điểm ${stat.toUpperCase()}`);
-                fetchCharacterProfile();
-            } else {
-                toast.error(data.error);
-            }
+
         } catch (e) { toast.error("Lỗi kết nối"); }
     };
 
@@ -981,7 +976,7 @@ export default function GameClient() {
             const res = await fetch(`${API_URL}/game/arena/battle`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ player1Id: state.user.id, player2Id: arenaOpponent.id })
+                body: JSON.stringify({ player1Id: state?.user?.id, player2Id: arenaOpponent.id })
             });
             const data = await res.json();
 
@@ -1760,7 +1755,7 @@ export default function GameClient() {
                     )}
 
                     {/* PVP Tab */}
-                    {pvpSubTab === 'RAID' && (
+                    {activeTab === 'PVP' && pvpSubTab === 'RAID' && (
                         <div className="space-y-6">
                             {/* Protection Status */}
                             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 flex justify-between items-center">
@@ -2136,7 +2131,7 @@ export default function GameClient() {
                                 <>
                                     {/* AFK Combat Animation Overlay */}
                                     <AFKCombatOverlay
-                                        userId={session!.user.id}
+                                        userId={session?.user?.id || ''}
                                         mapId={trainingState.trainingMapId}
                                         onComplete={() => fetchTrainingState()}
                                     />
@@ -2205,8 +2200,8 @@ export default function GameClient() {
                         </div>
                     )}
 
-                    {activeTab === 'SKILLS' && (
-                        <SkillsTab userId={session!.user.id} />
+                    {activeTab === 'SKILLS' && session?.user?.id && (
+                        <SkillsTab userId={session.user.id} />
                     )}
                 </div>
             </div>
@@ -2282,8 +2277,8 @@ export default function GameClient() {
             {/* NEW TURN-BASED COMBAT MODAL */}
             {showCombatModal && (
                 <CombatModal
-                    userId={session!.user.id}
-                    initialEnemyId={activeEnemyId || undefined}
+                    userId={session?.user?.id || ''}
+                    enemyId={activeEnemyId || ''}
                     onClose={() => {
                         setShowCombatModal(false);
                         setActiveEnemyId(null);

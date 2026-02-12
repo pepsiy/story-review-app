@@ -142,6 +142,10 @@ export const users = pgTable("user", {
     trainingMapId: text("training_map_id"),
     trainingStartedAt: timestamp("training_started_at"),
 
+    // Phase 4: Story Progress
+    storyChapter: text("story_chapter").default('chapter_1'),
+    storyStep: integer("story_step").default(0),
+
     // Phase 28: Combat System
     combatStatus: text("combat_status").default("IDLE"), // IDLE | IN_COMBAT
     combatState: text("combat_state"), // JSON string of CombatState

@@ -206,7 +206,14 @@ export const craftItem = async (req: Request, res: Response) => {
         const recipe = await db.query.gameItems.findFirst({ where: eq(gameItems.id, itemId) });
         if (!recipe || !recipe.ingredients) return res.status(400).json({ error: "Invalid recipe" });
 
-        const ingredients = (recipe.ingredients as unknown) as { itemId: string, quantity: number }[];
+        let ingredients: { itemId: string, quantity: number }[] = [];
+        try {
+            ingredients = typeof recipe.ingredients === 'string'
+                ? JSON.parse(recipe.ingredients)
+                : recipe.ingredients;
+        } catch (e) {
+            return res.status(500).json({ error: "Recipe data error" });
+        }
 
         // Check cost
         const cost = 100; // Hardcoded craft cost for now
