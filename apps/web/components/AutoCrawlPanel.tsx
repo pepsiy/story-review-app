@@ -38,12 +38,12 @@ type FailedChapter = {
 
 export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitle: string }) {
     const [sourceUrl, setSourceUrl] = useState("");
+    const [sourceOption, setSourceOption] = useState<'truyenfull' | 'xtruyen'>('truyenfull');
     const [job, setJob] = useState<CrawlJob | null>(null);
     const [failedChapters, setFailedChapters] = useState<FailedChapter[]>([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [countdown, setCountdown] = useState(0);
-    const [mergeRatio, setMergeRatio] = useState(5); // Default 5 chapters -> 1 summary
     const [configBatchSize, setConfigBatchSize] = useState(5);
     const [logs, setLogs] = useState<{ message: string; type: string; timestamp: string; jobId?: number }[]>([]);
 
@@ -321,52 +321,107 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                     <h3 className="font-semibold text-blue-800 mb-2">🤖 Auto-Crawl & AI Summarization</h3>
                     <p className="text-sm text-blue-700">
                         Tự động crawl nội dung từ website nguồn và dùng AI tóm tắt từng chương.
-                        Hệ thống sẽ xử lý 5 chapters/lần với rate limiting an toàn.
                     </p>
                 </div>
 
-                {/* Configuration Section (Editable) */}
+                {/* Source Selection */}
                 <div className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
-                    <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
-                            <Settings className="h-4 w-4" /> Cấu hình Batch
-                        </h3>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={saveConfig}
-                            disabled={loading || processing}
+                    <h3 className="font-semibold text-gray-800">🌐 Chọn nguồn truyện</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* TruyenFull */}
+                        <label
+                            className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${sourceOption === 'truyenfull'
+                                    ? 'border-blue-500 bg-blue-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
                         >
-                            Lưu cấu hình
-                        </Button>
+                            <input
+                                type="radio"
+                                name="sourceOption"
+                                value="truyenfull"
+                                checked={sourceOption === 'truyenfull'}
+                                onChange={() => {
+                                    setSourceOption('truyenfull');
+                                    setSourceUrl('');
+                                }}
+                                className="mt-1"
+                            />
+                            <div>
+                                <div className="font-medium text-sm text-gray-900">TruyenFull.Vision</div>
+                                <div className="text-xs text-gray-500 mt-0.5">truyenfull.vision/ten-truyen/</div>
+                            </div>
+                        </label>
+                        {/* XTruyen */}
+                        <label
+                            className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${sourceOption === 'xtruyen'
+                                    ? 'border-indigo-500 bg-indigo-50'
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                        >
+                            <input
+                                type="radio"
+                                name="sourceOption"
+                                value="xtruyen"
+                                checked={sourceOption === 'xtruyen'}
+                                onChange={() => {
+                                    setSourceOption('xtruyen');
+                                    setSourceUrl('');
+                                }}
+                                className="mt-1"
+                            />
+                            <div>
+                                <div className="font-medium text-sm text-gray-900">XTruyen.VN</div>
+                                <div className="text-xs text-gray-500 mt-0.5">xtruyen.vn/truyen/ten-truyen/</div>
+                            </div>
+                        </label>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <Label htmlFor="configBatchSize">Số chương gộp (Batch Size)</Label>
-                            <div className="flex items-center gap-2 mt-1">
-                                <Input
-                                    id="configBatchSize"
-                                    type="number"
-                                    min={1}
-                                    max={50}
-                                    value={configBatchSize}
-                                    onChange={(e) => setConfigBatchSize(parseInt(e.target.value) || 5)}
-                                    className="w-24"
-                                />
-                                <span className="text-sm text-gray-500">chương / 1 lần tóm tắt</span>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Hệ thống sẽ gom {configBatchSize} chương gốc thành 1 bản tóm tắt.
-                            </p>
-                        </div>
+                    {/* URL Input */}
+                    <div className="space-y-1.5">
+                        <Label htmlFor="sourceUrl">URL truyện</Label>
+                        <Input
+                            id="sourceUrl"
+                            type="url"
+                            placeholder={
+                                sourceOption === 'xtruyen'
+                                    ? 'https://xtruyen.vn/truyen/ten-truyen/'
+                                    : 'https://truyenfull.vision/ten-truyen/'
+                            }
+                            value={sourceUrl}
+                            onChange={(e) => setSourceUrl(e.target.value)}
+                        />
+                        <p className="text-xs text-gray-400">
+                            {sourceOption === 'xtruyen'
+                                ? '✅ Ví dụ: https://xtruyen.vn/truyen/con-duong-ba-chu/'
+                                : '✅ Ví dụ: https://truyenfull.vision/tien-nghich/'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Batch Config */}
+                <div className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
+                    <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+                        <Settings className="h-4 w-4" /> Cấu hình Batch
+                    </h3>
+                    <div className="flex items-center gap-3">
+                        <Label htmlFor="configBatchSize">Số chương / tóm tắt:</Label>
+                        <Input
+                            id="configBatchSize"
+                            type="number"
+                            min={1}
+                            max={50}
+                            value={configBatchSize}
+                            onChange={(e) => setConfigBatchSize(parseInt(e.target.value) || 5)}
+                            className="w-24"
+                        />
+                        <span className="text-sm text-gray-500">chương → 1 bản tóm tắt</span>
                     </div>
                 </div>
 
                 <Button
                     onClick={initCrawl}
-                    disabled={processing}
-                    className="w-full"
+                    disabled={processing || !sourceUrl.trim()}
+                    className="w-full bg-blue-600 hover:bg-blue-700"
                 >
                     {processing ? (
                         <>
@@ -374,10 +429,10 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                             Đang khởi tạo...
                         </>
                     ) : (
-                        <>🚀 Initialize Crawl Job</>
+                        <>🚀 Bắt đầu Crawl từ {sourceOption === 'xtruyen' ? 'XTruyen.VN' : 'TruyenFull.Vision'}</>
                     )}
                 </Button>
-            </div >
+            </div>
         );
     }
 
