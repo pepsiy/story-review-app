@@ -309,17 +309,12 @@ export class CrawlService {
                 .filter(g => g.length > 0)
                 .join(', ');
 
-            // Cover image: first img in .book-detail or img with src containing uploads
+            // Cover image: .summary_image img is the canonical cover on xtruyen.vn
             const coverImage =
+                $('.summary_image img').first().attr('src') ||
                 $('.book-detail img').first().attr('src') ||
+                $('img[src*="img.xtruyen.vn"]').first().attr('src') ||
                 $('img[src*="uploads"]').first().attr('src') ||
-                $('img[class*="thumb"]').first().attr('src') ||
-                $('img[class*="cover"]').first().attr('src') ||
-                $('img[class*="book"]').first().attr('src') ||
-                $('img').filter((i, el) => {
-                    const src = $(el).attr('src') || '';
-                    return src.includes('xtruyen.vn') && !src.includes('logo');
-                }).first().attr('src') ||
                 '';
 
             // Description: .entry-content p or .description or paragraphs near h2.gioi-thieu
