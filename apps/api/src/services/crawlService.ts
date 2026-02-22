@@ -435,20 +435,32 @@ export class CrawlService {
             const html = await this.fetchXtruyen(normalizedUrl);
             const $ = cheerio.load(html);
 
-            // Remove navigation, ads, and unwanted elements
-            $('.chapter-nav, .nav-buttons, .ads, .ad-container, [class*="shopee"], script, style').remove();
+            // Remove navigation, ads, and unwanted elements (including inline ads in content)
+            $('.chapter-nav, .nav-buttons, .ads, .ad-container, .slider-container, ' +
+                '[class*="shopee"], [id*="ads"], [id*="Slider"], script, style').remove();
 
-            // Try selectors in order of specificity
+            // Primary selector: #chapter-reading-content (div.text-left > div#chapter-reading-content)
+            // Fallback selectors for future layout changes
             let content = '';
-            const selectors = ['.entry-content', '#content', '.chapter-content', '#chapter-content', '.box-content', '.text-chapter'];
+            const selectors = [
+                '#chapter-reading-content',
+                '.text-left #chapter-reading-content',
+                '.reading-content-wrap .content-area',
+                '.entry-content',
+                '.chapter-content',
+            ];
 
             for (const selector of selectors) {
                 const el = $(selector);
                 if (el.length > 0) {
                     content = el.text().trim();
-                    if (content.length > 100) break; // Found meaningful content
+                    if (content.length > 100) {
+                        console.log(`📖 xtruyen content via "${selector}" (${content.length} chars)`);
+                        break;
+                    }
                 }
             }
+
 
             if (!content || content.length < 50) {
                 throw new Error('No content found in chapter page');
