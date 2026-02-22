@@ -51,44 +51,34 @@ export class CrawlService {
     };
 
     /**
-     * Fetch xtruyen.vn page with cookie session to bypass 403.
-     * Step 1: Visit homepage to get cookies
-     * Step 2: Use cookies + Referer to fetch the actual page
+     * Fetch xtruyen.vn using native Node.js fetch (undici/HTTP2).
+     * Root cause of 403: axios uses a non-browser TLS fingerprint that
+     * Cloudflare detects. Native fetch uses HTTP/2 via undici which passes.
      */
     private async fetchXtruyen(url: string): Promise<string> {
-        // Step 1: get cookies from homepage
-        let cookieHeader = '';
-        try {
-            const homeRes = await axios.get('https://xtruyen.vn/', {
-                headers: {
-                    ...this.baseHeaders,
-                    'Sec-Fetch-Site': 'none',
-                    'Sec-Fetch-User': '?1',
-                },
-                timeout: 15000,
-                maxRedirects: 5,
-                responseType: 'text',
-            });
-            // Extract Set-Cookie headers
-            const setCookie = homeRes.headers['set-cookie'];
-            if (setCookie && Array.isArray(setCookie)) {
-                cookieHeader = setCookie.map(c => c.split(';')[0]).join('; ');
-            }
-        } catch {
-            console.warn('⚠️ Could not prefetch xtruyen homepage for cookies');
-        }
-
-        // Step 2: fetch actual URL with cookies + Referer
-        const res = await axios.get(url, {
+        const res = await (globalThis.fetch as typeof fetch)(url, {
+            method: 'GET',
             headers: {
-                ...this.xtruyenHeaders,
-                ...(cookieHeader ? { 'Cookie': cookieHeader } : {}),
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Cache-Control': 'max-age=0',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': '"Windows"',
             },
-            timeout: 30000,
-            maxRedirects: 5,
-            responseType: 'text',
-        });
-        return res.data;
+            redirect: 'follow',
+        } as RequestInit);
+
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status} fetching ${url}`);
+        }
+        return res.text();
     }
 
     /**
