@@ -269,6 +269,28 @@ export class CrawlService {
     //  XTRUYEN.VN implementation
     // ============================================================
 
+    /**
+     * Normalize xtruyen.vn chapter URL.
+     * Fixes stored URLs missing /truyen/ prefix, e.g.:
+     *   https://xtruyen.vn/con-duong-ba-chu/chuong-1
+     * → https://xtruyen.vn/truyen/con-duong-ba-chu/chuong-1/
+     */
+    private normalizeXtruyenUrl(url: string): string {
+        try {
+            const u = new URL(url);
+            if (u.hostname !== 'xtruyen.vn') return url;
+            // Ensure /truyen/ prefix on pathname
+            if (!u.pathname.startsWith('/truyen/')) {
+                u.pathname = '/truyen' + u.pathname;
+            }
+            // Ensure trailing slash
+            if (!u.pathname.endsWith('/')) u.pathname += '/';
+            return u.toString();
+        } catch {
+            return url;
+        }
+    }
+
     private async extractWorkInfo_xtruyen(url: string) {
         try {
             const html = await this.fetchXtruyen(url);
@@ -349,8 +371,8 @@ export class CrawlService {
                 const titleMatch = linkText.match(/Chương\s+\d+\s*[:\-–]\s*(.+)/i);
                 const title = titleMatch ? titleMatch[1].trim() : (linkText || `Chương ${number}`);
 
-                const fullUrl = href.startsWith('http') ? href : `https://xtruyen.vn${href}`;
-                chapterLinks.set(number, { number, title, url: fullUrl });
+                const rawUrl = href.startsWith('http') ? href : `https://xtruyen.vn${href}`;
+                chapterLinks.set(number, { number, title, url: this.normalizeXtruyenUrl(rawUrl) });
             });
 
             chapters.push(...Array.from(chapterLinks.values()).sort((a, b) => a.number - b.number));
@@ -398,9 +420,8 @@ export class CrawlService {
                 const linkText = $p(el).text().trim();
                 const titleMatch = linkText.match(/Chương\s+\d+\s*[:\-–]\s*(.+)/i);
                 const title = titleMatch ? titleMatch[1].trim() : `Chương ${number}`;
-                const fullUrl = href.startsWith('http') ? href : `https://xtruyen.vn${href}`;
-
-                chapters.push({ number, title, url: fullUrl });
+                const rawUrl = href.startsWith('http') ? href : `https://xtruyen.vn${href}`;
+                chapters.push({ number, title, url: this.normalizeXtruyenUrl(rawUrl) });
             });
 
             if (page < totalPages) await this.delay(800);
@@ -414,7 +435,9 @@ export class CrawlService {
 
     private async crawlChapterContent_xtruyen(chapterUrl: string): Promise<string> {
         try {
-            const html = await this.fetchXtruyen(chapterUrl);
+            const normalizedUrl = this.normalizeXtruyenUrl(chapterUrl);
+            if (normalizedUrl !== chapterUrl) console.log(`🔧 Normalized URL: ${chapterUrl} → ${normalizedUrl}`);
+            const html = await this.fetchXtruyen(normalizedUrl);
             const $ = cheerio.load(html);
 
             // Remove navigation, ads, and unwanted elements
