@@ -52,7 +52,12 @@ export class CrawlService {
 
     /**
      * Fetch xtruyen.vn page.
-     * Strategy: direct → Vercel proxy → ScraperAPI (residential IPs bypass Cloudflare).
+     * Strategy: direct → CF Worker (edge bypass) → Vercel proxy
+     *
+     * CF Worker URL: https://xtruyen-proxy.dung-young.workers.dev
+     * Env vars on Render:
+     *   CF_WORKER_URL    = https://xtruyen-proxy.dung-young.workers.dev
+     *   CF_WORKER_SECRET = (shared secret set via `wrangler secret put PROXY_SECRET`)
      */
     private async fetchXtruyen(url: string): Promise<string> {
         const browserHeaders = {
@@ -67,7 +72,7 @@ export class CrawlService {
             'Sec-Fetch-User': '?1',
         };
 
-        // 1. Try direct fetch (works from local/residential IPs)
+        // 1. Try direct fetch (works from residential/VN IPs)
         try {
             const res = await (globalThis.fetch as typeof fetch)(url, {
                 method: 'GET', headers: browserHeaders, redirect: 'follow',
@@ -81,48 +86,44 @@ export class CrawlService {
             console.warn(`⚠️ fetchXtruyen direct error: ${err.message}`);
         }
 
-        // 2. Vercel proxy fallback
-        const proxyUrl = process.env.PROXY_FETCH_URL;
-        const proxySecret = process.env.PROXY_FETCH_SECRET;
-        if (proxyUrl && proxySecret) {
+        // Helper: call a proxy that accepts { url, secret } POST → { html }
+        const callProxy = async (proxyUrl: string, secret: string, name: string): Promise<string | null> => {
             try {
-                console.log(`📡 fetchXtruyen via Vercel proxy...`);
-                const proxyRes = await (globalThis.fetch as typeof fetch)(proxyUrl, {
+                console.log(`📡 fetchXtruyen via ${name}...`);
+                const r = await (globalThis.fetch as typeof fetch)(proxyUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url, secret: proxySecret }),
+                    body: JSON.stringify({ url, secret }),
                 } as RequestInit);
-                if (proxyRes.ok) {
-                    const { html } = await proxyRes.json() as { html: string };
-                    if (html) {
-                        console.log(`✅ fetchXtruyen via Vercel proxy OK`);
-                        return html;
-                    }
+                if (r.ok) {
+                    const { html } = await r.json() as { html: string };
+                    if (html) { console.log(`✅ fetchXtruyen via ${name} OK (${html.length} bytes)`); return html; }
                 }
-                console.warn(`⚠️ Vercel proxy returned ${proxyRes.status}`);
+                console.warn(`⚠️ ${name} returned ${r.status}`);
             } catch (err: any) {
-                console.warn(`⚠️ Vercel proxy error: ${err.message}`);
+                console.warn(`⚠️ ${name} error: ${err.message}`);
             }
+            return null;
+        };
+
+        // 2. Cloudflare Worker (runs on CF edge network — bypasses datacenter IP block)
+        const cfUrl = process.env.CF_WORKER_URL;
+        const cfSecret = process.env.CF_WORKER_SECRET;
+        if (cfUrl && cfSecret) {
+            const html = await callProxy(cfUrl, cfSecret, 'CF Worker');
+            if (html) return html;
         }
 
-        // 3. ScraperAPI fallback (residential IPs, free 1000 req/month)
-        const scraperKey = process.env.SCRAPERAPI_KEY;
-        if (scraperKey) {
-            console.log(`📡 fetchXtruyen via ScraperAPI...`);
-            const scraperUrl = `http://api.scraperapi.com?api_key=${scraperKey}&url=${encodeURIComponent(url)}&render=false&country_code=vn`;
-            const scraperRes = await (globalThis.fetch as typeof fetch)(scraperUrl, {
-                method: 'GET',
-                headers: { 'User-Agent': 'Mozilla/5.0' },
-            } as RequestInit);
-            if (scraperRes.ok) {
-                const html = await scraperRes.text();
-                console.log(`✅ fetchXtruyen via ScraperAPI OK (${html.length} bytes)`);
-                return html;
-            }
-            console.warn(`⚠️ ScraperAPI returned ${scraperRes.status}`);
+        // 3. Vercel proxy fallback (legacy, may also be 403)
+        const vercelUrl = process.env.PROXY_FETCH_URL;
+        const vercelSecret = process.env.PROXY_FETCH_SECRET;
+        if (vercelUrl && vercelSecret) {
+            const html = await callProxy(vercelUrl, vercelSecret, 'Vercel proxy');
+            if (html) return html;
         }
 
-        throw new Error(`Cannot fetch ${url}: blocked by Cloudflare. Set SCRAPERAPI_KEY env var (free at scraperapi.com).`);
+        throw new Error(`Cannot fetch ${url}: all proxy methods failed. ` +
+            `Set CF_WORKER_URL + CF_WORKER_SECRET on Render (Cloudflare Worker at https://xtruyen-proxy.dung-young.workers.dev).`);
     }
 
     /**

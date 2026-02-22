@@ -1,0 +1,6 @@
+name = "xtruyen-proxy"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# Secrets: set via `wrangler secret put PROXY_SECRET`
+# Or in Cloudflare Dashboard → Worker → Settings → Variables
