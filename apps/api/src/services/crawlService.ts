@@ -51,34 +51,66 @@ export class CrawlService {
     };
 
     /**
-     * Fetch xtruyen.vn using native Node.js fetch (undici/HTTP2).
-     * Root cause of 403: axios uses a non-browser TLS fingerprint that
-     * Cloudflare detects. Native fetch uses HTTP/2 via undici which passes.
+     * Fetch xtruyen.vn page.
+     * Strategy: try direct fetch first. If Cloudflare blocks (403),
+     * fall back to Vercel proxy (PROXY_FETCH_URL / PROXY_FETCH_SECRET env vars).
      */
     private async fetchXtruyen(url: string): Promise<string> {
-        const res = await (globalThis.fetch as typeof fetch)(url, {
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Cache-Control': 'max-age=0',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
-                'Sec-Fetch-User': '?1',
-                'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-                'Sec-Ch-Ua-Mobile': '?0',
-                'Sec-Ch-Ua-Platform': '"Windows"',
-            },
-            redirect: 'follow',
+        const fetchHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Cache-Control': 'max-age=0',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+        };
+
+        // 1. Try direct fetch
+        try {
+            const res = await (globalThis.fetch as typeof fetch)(url, {
+                method: 'GET',
+                headers: fetchHeaders,
+                redirect: 'follow',
+            } as RequestInit);
+
+            if (res.ok) {
+                console.log(`✅ fetchXtruyen direct: ${res.status} for ${url}`);
+                return res.text();
+            }
+
+            console.warn(`⚠️ fetchXtruyen direct got ${res.status}, trying proxy fallback...`);
+        } catch (err: any) {
+            console.warn(`⚠️ fetchXtruyen direct error: ${err.message}, trying proxy fallback...`);
+        }
+
+        // 2. Fallback: Vercel proxy (runs from IPs not blocked by Cloudflare)
+        const proxyUrl = process.env.PROXY_FETCH_URL; // e.g. https://tomtat.com.vn/api/proxy-fetch
+        const proxySecret = process.env.PROXY_FETCH_SECRET;
+
+        if (!proxyUrl || !proxySecret) {
+            throw new Error(`xtruyen.vn returned 403: Server IP is blocked by Cloudflare. Set PROXY_FETCH_URL and PROXY_FETCH_SECRET env vars.`);
+        }
+
+        console.log(`📡 fetchXtruyen via proxy: ${proxyUrl}`);
+        const proxyRes = await (globalThis.fetch as typeof fetch)(proxyUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, secret: proxySecret }),
         } as RequestInit);
 
-        if (!res.ok) {
-            throw new Error(`HTTP ${res.status} fetching ${url}`);
+        if (!proxyRes.ok) {
+            const errText = await proxyRes.text();
+            throw new Error(`Proxy returned ${proxyRes.status}: ${errText}`);
         }
-        return res.text();
+
+        const { html } = await proxyRes.json() as { html: string };
+        if (!html) throw new Error('Proxy returned empty HTML');
+
+        console.log(`✅ fetchXtruyen via proxy: got ${html.length} bytes`);
+        return html;
     }
 
     /**
