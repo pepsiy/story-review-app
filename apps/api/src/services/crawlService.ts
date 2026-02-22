@@ -52,13 +52,12 @@ export class CrawlService {
 
     /**
      * Fetch xtruyen.vn page.
-     * Strategy: try direct fetch first. If Cloudflare blocks (403),
-     * fall back to Vercel proxy (PROXY_FETCH_URL / PROXY_FETCH_SECRET env vars).
+     * Strategy: direct → Vercel proxy → ScraperAPI (residential IPs bypass Cloudflare).
      */
     private async fetchXtruyen(url: string): Promise<string> {
-        const fetchHeaders = {
+        const browserHeaders = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
             'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
             'Cache-Control': 'max-age=0',
             'Upgrade-Insecure-Requests': '1',
@@ -68,49 +67,62 @@ export class CrawlService {
             'Sec-Fetch-User': '?1',
         };
 
-        // 1. Try direct fetch
+        // 1. Try direct fetch (works from local/residential IPs)
         try {
             const res = await (globalThis.fetch as typeof fetch)(url, {
-                method: 'GET',
-                headers: fetchHeaders,
-                redirect: 'follow',
+                method: 'GET', headers: browserHeaders, redirect: 'follow',
             } as RequestInit);
-
             if (res.ok) {
-                console.log(`✅ fetchXtruyen direct: ${res.status} for ${url}`);
+                console.log(`✅ fetchXtruyen direct OK`);
                 return res.text();
             }
-
-            console.warn(`⚠️ fetchXtruyen direct got ${res.status}, trying proxy fallback...`);
+            console.warn(`⚠️ fetchXtruyen direct got ${res.status}`);
         } catch (err: any) {
-            console.warn(`⚠️ fetchXtruyen direct error: ${err.message}, trying proxy fallback...`);
+            console.warn(`⚠️ fetchXtruyen direct error: ${err.message}`);
         }
 
-        // 2. Fallback: Vercel proxy (runs from IPs not blocked by Cloudflare)
-        const proxyUrl = process.env.PROXY_FETCH_URL; // e.g. https://tomtat.com.vn/api/proxy-fetch
+        // 2. Vercel proxy fallback
+        const proxyUrl = process.env.PROXY_FETCH_URL;
         const proxySecret = process.env.PROXY_FETCH_SECRET;
-
-        if (!proxyUrl || !proxySecret) {
-            throw new Error(`xtruyen.vn returned 403: Server IP is blocked by Cloudflare. Set PROXY_FETCH_URL and PROXY_FETCH_SECRET env vars.`);
+        if (proxyUrl && proxySecret) {
+            try {
+                console.log(`📡 fetchXtruyen via Vercel proxy...`);
+                const proxyRes = await (globalThis.fetch as typeof fetch)(proxyUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, secret: proxySecret }),
+                } as RequestInit);
+                if (proxyRes.ok) {
+                    const { html } = await proxyRes.json() as { html: string };
+                    if (html) {
+                        console.log(`✅ fetchXtruyen via Vercel proxy OK`);
+                        return html;
+                    }
+                }
+                console.warn(`⚠️ Vercel proxy returned ${proxyRes.status}`);
+            } catch (err: any) {
+                console.warn(`⚠️ Vercel proxy error: ${err.message}`);
+            }
         }
 
-        console.log(`📡 fetchXtruyen via proxy: ${proxyUrl}`);
-        const proxyRes = await (globalThis.fetch as typeof fetch)(proxyUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, secret: proxySecret }),
-        } as RequestInit);
-
-        if (!proxyRes.ok) {
-            const errText = await proxyRes.text();
-            throw new Error(`Proxy returned ${proxyRes.status}: ${errText}`);
+        // 3. ScraperAPI fallback (residential IPs, free 1000 req/month)
+        const scraperKey = process.env.SCRAPERAPI_KEY;
+        if (scraperKey) {
+            console.log(`📡 fetchXtruyen via ScraperAPI...`);
+            const scraperUrl = `http://api.scraperapi.com?api_key=${scraperKey}&url=${encodeURIComponent(url)}&render=false&country_code=vn`;
+            const scraperRes = await (globalThis.fetch as typeof fetch)(scraperUrl, {
+                method: 'GET',
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+            } as RequestInit);
+            if (scraperRes.ok) {
+                const html = await scraperRes.text();
+                console.log(`✅ fetchXtruyen via ScraperAPI OK (${html.length} bytes)`);
+                return html;
+            }
+            console.warn(`⚠️ ScraperAPI returned ${scraperRes.status}`);
         }
 
-        const { html } = await proxyRes.json() as { html: string };
-        if (!html) throw new Error('Proxy returned empty HTML');
-
-        console.log(`✅ fetchXtruyen via proxy: got ${html.length} bytes`);
-        return html;
+        throw new Error(`Cannot fetch ${url}: blocked by Cloudflare. Set SCRAPERAPI_KEY env var (free at scraperapi.com).`);
     }
 
     /**
