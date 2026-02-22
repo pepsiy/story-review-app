@@ -52,12 +52,8 @@ export class CrawlService {
 
     /**
      * Fetch xtruyen.vn page.
-     * Strategy: direct → CF Worker (edge bypass) → Vercel proxy
-     *
-     * CF Worker URL: https://xtruyen-proxy.dung-young.workers.dev
-     * Env vars on Render:
-     *   CF_WORKER_URL    = https://xtruyen-proxy.dung-young.workers.dev
-     *   CF_WORKER_SECRET = (shared secret set via `wrangler secret put PROXY_SECRET`)
+     * Strategy: direct fetch → Cloudflare Worker proxy (edge bypass).
+     * Env vars on Render: CF_WORKER_URL, CF_WORKER_SECRET
      */
     private async fetchXtruyen(url: string): Promise<string> {
         const browserHeaders = {
@@ -114,16 +110,7 @@ export class CrawlService {
             if (html) return html;
         }
 
-        // 3. Vercel proxy fallback (legacy, may also be 403)
-        const vercelUrl = process.env.PROXY_FETCH_URL;
-        const vercelSecret = process.env.PROXY_FETCH_SECRET;
-        if (vercelUrl && vercelSecret) {
-            const html = await callProxy(vercelUrl, vercelSecret, 'Vercel proxy');
-            if (html) return html;
-        }
-
-        throw new Error(`Cannot fetch ${url}: all proxy methods failed. ` +
-            `Set CF_WORKER_URL + CF_WORKER_SECRET on Render (Cloudflare Worker at https://xtruyen-proxy.dung-young.workers.dev).`);
+        throw new Error(`Cannot fetch ${url}: blocked by Cloudflare. Set CF_WORKER_URL + CF_WORKER_SECRET on Render.`);
     }
 
     /**
