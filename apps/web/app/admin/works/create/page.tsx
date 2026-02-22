@@ -14,6 +14,7 @@ export default function CreateWorkPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [extracting, setExtracting] = useState(false);
+    const [sourceType, setSourceType] = useState<'truyenfull' | 'xtruyen'>('truyenfull');
 
     // Form States
     const [slug, setSlug] = useState("");
@@ -168,22 +169,63 @@ export default function CreateWorkPage() {
             <Card className="mb-8 border-indigo-100 bg-indigo-50/50">
                 <CardHeader className="pb-3">
                     <CardTitle className="text-base text-indigo-800 flex items-center gap-2">
-                        <Download className="w-4 h-4" /> Import từ TruyenFull
+                        <Download className="w-4 h-4" /> Import từ nguồn truyện
                     </CardTitle>
-                    <CardDescription>Nhập link truyện để tự động lấy thông tin & cấu hình Crawl</CardDescription>
+                    <CardDescription>Nhập link truyện để tự động lấy thông tin &amp; cấu hình Crawl</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-3">
+                    {/* Source tabs */}
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => { setSourceType('truyenfull'); setImportUrl(''); }}
+                            className={`px-3 py-1.5 rounded text-sm font-medium border transition-colors ${sourceType === 'truyenfull'
+                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400'
+                                }`}
+                        >
+                            TruyenFull.Vision
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { setSourceType('xtruyen'); setImportUrl(''); }}
+                            className={`px-3 py-1.5 rounded text-sm font-medium border transition-colors ${sourceType === 'xtruyen'
+                                    ? 'bg-orange-500 text-white border-orange-500'
+                                    : 'bg-white text-slate-600 border-slate-300 hover:border-orange-400'
+                                }`}
+                        >
+                            XTruyen.VN
+                        </button>
+                    </div>
+
+                    {/* URL input */}
                     <div className="flex gap-2">
                         <Input
-                            placeholder="https://truyenfull.vision/..."
+                            placeholder={
+                                sourceType === 'xtruyen'
+                                    ? 'https://xtruyen.vn/truyen/ten-truyen/'
+                                    : 'https://truyenfull.vision/ten-truyen/'
+                            }
                             value={importUrl}
                             onChange={(e) => setImportUrl(e.target.value)}
                             className="bg-white"
                         />
-                        <Button onClick={handleExtractInfo} disabled={extracting} className="whitespace-nowrap bg-indigo-600 hover:bg-indigo-700">
+                        <Button
+                            onClick={handleExtractInfo}
+                            disabled={extracting || !importUrl}
+                            className={`whitespace-nowrap ${sourceType === 'xtruyen'
+                                    ? 'bg-orange-500 hover:bg-orange-600'
+                                    : 'bg-indigo-600 hover:bg-indigo-700'
+                                }`}
+                        >
                             {extracting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Lấy Thông Tin"}
                         </Button>
                     </div>
+                    <p className="text-xs text-slate-400">
+                        {sourceType === 'xtruyen'
+                            ? '✅ Ví dụ: https://xtruyen.vn/truyen/con-duong-ba-chu/'
+                            : '✅ Ví dụ: https://truyenfull.vision/tien-nghich/'}
+                    </p>
                 </CardContent>
             </Card>
 
