@@ -444,7 +444,8 @@ export class CrawlService {
 
             // Remove navigation, ads, and unwanted elements (including inline ads in content)
             $('.chapter-nav, .nav-buttons, .ads, .ad-container, .slider-container, ' +
-                '[class*="shopee"], [id*="ads"], [id*="Slider"], script, style').remove();
+                '[class*="shopee"], [id*="ads"], [id*="Slider"], script, style, ' +
+                'select, option, .select-pagination, .c-selectpicker, form, .post-rating, .author-content, .genres-content, .tags-content, #comments, .comments-area').remove();
 
             // Primary selector: #chapter-reading-content (div.text-left > div#chapter-reading-content)
             // Fallback selectors for future layout changes
