@@ -351,6 +351,7 @@ export class CrawlService {
 
             // Chapter links pattern: href contains /chuong-N/
             const chapterLinks = new Map<number, ChapterInfo>();
+            let maxChapterNumber = 0;
 
             $('a[href*="/chuong-"]').each((i, el) => {
                 const href = $(el).attr('href') || '';
@@ -359,7 +360,10 @@ export class CrawlService {
                 if (!urlMatch) return;
 
                 const number = parseInt(urlMatch[1], 10);
-                if (isNaN(number) || chapterLinks.has(number)) return;
+                if (isNaN(number)) return;
+                maxChapterNumber = Math.max(maxChapterNumber, number);
+
+                if (chapterLinks.has(number)) return;
 
                 const linkText = $(el).text().trim();
                 // Extract title from link text if it has "Chương N: Title" format
@@ -370,7 +374,42 @@ export class CrawlService {
                 chapterLinks.set(number, { number, title, url: this.normalizeXtruyenUrl(rawUrl) });
             });
 
-            chapters.push(...Array.from(chapterLinks.values()).sort((a, b) => a.number - b.number));
+            // Also check all short text elements on the page for "Chương N" to find the absolute max chapter
+            // This is useful if the latest chapter is just text (e.g. in a "Latest update: Chương 3750" badge)
+            $('*').each((i, el) => {
+                const text = $(el).text().trim();
+                // Only parse short text to avoid scanning entire content blocks
+                if (text && text.length < 100) {
+                    const match = text.match(/Chương\s+(\d+)/i);
+                    if (match) {
+                        const number = parseInt(match[1], 10);
+                        if (!isNaN(number)) maxChapterNumber = Math.max(maxChapterNumber, number);
+                    }
+                }
+            });
+
+            // If we found a max chapter number but didn't scrape all chapters (because of AJAX pagination)
+            // We can just generate the missing ones since the URL structure is completely predictable
+            if (maxChapterNumber > chapterLinks.size && maxChapterNumber > 0) {
+                console.log(`⚠️ xtruyen scraped only ${chapterLinks.size} chapters but found max chapter ${maxChapterNumber}. Auto-generating the rest to bypass AJAX...`);
+                // Normalize the story url to ensure it has /truyen/ prefix
+                let baseUrl = this.normalizeXtruyenUrl(sourceUrl);
+                // The story URL should not have chapter suffix, but just in case:
+                baseUrl = baseUrl.replace(/\/chuong-\d+\/?$/, '/');
+                if (!baseUrl.endsWith('/')) baseUrl += '/';
+
+                for (let i = 1; i <= maxChapterNumber; i++) {
+                    const existing = chapterLinks.get(i);
+                    chapters.push({
+                        number: i,
+                        title: existing?.title || `Chương ${i}`,
+                        url: existing?.url || `${baseUrl}chuong-${i}/`
+                    });
+                }
+            } else {
+                // We got all of them, or none
+                chapters.push(...Array.from(chapterLinks.values()).sort((a, b) => a.number - b.number));
+            }
 
             // If no chapters found from listing, try paginated approach
             if (chapters.length === 0) {
