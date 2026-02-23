@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { db } from '../../../../packages/db/src';
 import { crawlJobs, crawlChapters, systemSettings, works } from '../../../../packages/db/src';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, sql, desc } from 'drizzle-orm';
 import { crawlService } from '../services/crawlService';
 import { summarizeChapter } from '../services/aiService';
 import { processBatchBackground } from '../controllers/crawlController';
@@ -68,8 +68,96 @@ export function startCrawlCron() {
         } catch (error: any) {
             console.error('❌ Cron job error:', error.message);
         }
+    }); // Close the first 2-minute cron
+
+    // Chạy mỗi 60 phút để kiểm tra truyện ONGOING
+    cron.schedule('0 * * * *', async () => {
+        try {
+            await checkOngoingStoriesUpdates();
+        } catch (error: any) {
+            console.error('❌ Cron check updates error:', error.message);
+        }
     });
 
     console.log('✅ Crawl cron job started (runs every 2 minutes)');
+    console.log('✅ Story update checker started (runs every hour)');
+}
+
+async function checkOngoingStoriesUpdates() {
+    // Only check if global auto mode is enabled (optional, assuming we only want auto-updates if system is tracking automatically)
+    const globalAutoSetting = await db.query.systemSettings.findFirst({
+        where: eq(systemSettings.key, 'crawl_auto_mode_enabled')
+    });
+    if (globalAutoSetting?.value !== 'true') return;
+
+    console.log('🔍 Checking for updates on ONGOING stories...');
+
+    const ongoingWorks = await db.query.works.findMany({
+        where: eq(works.status, 'ONGOING')
+    });
+
+    for (const work of ongoingWorks) {
+        try {
+            // Find latest job for this work
+            const jobList = await db.select()
+                .from(crawlJobs)
+                .where(eq(crawlJobs.workId, work.id))
+                .orderBy(desc(crawlJobs.id))
+                .limit(1);
+
+            const job = jobList[0];
+            if (!job || !job.sourceUrl) continue;
+
+            const currentTotalChapters = job.totalChapters || 0;
+            const chapterList = await crawlService.crawlChapterList(job.sourceUrl);
+            const newTotalChapters = chapterList.length;
+
+            if (newTotalChapters > currentTotalChapters) {
+                const newChaptersCount = newTotalChapters - currentTotalChapters;
+                console.log(`🆕 Found ${newChaptersCount} new chapters for "${work.title}"`);
+
+                const newChapters = chapterList.slice(currentTotalChapters);
+                const finalRecords = newChapters.map(ch => ({
+                    jobId: job.id,
+                    workId: work.id,
+                    chapterNumber: ch.number,
+                    title: ch.title,
+                    sourceUrl: ch.url,
+                    status: 'pending' as const
+                }));
+
+                await db.insert(crawlChapters).values(finalRecords);
+
+                await db.update(crawlJobs)
+                    .set({
+                        totalChapters: newTotalChapters,
+                        status: 'ready' // Allow auto-crawl to pick it up if there's enough pending
+                    })
+                    .where(eq(crawlJobs.id, job.id));
+
+                const mergeSize = Math.max(job.chaptersPerSummary || 1, job.batchSize || 1);
+
+                // Get pending count
+                const pendingCountInfo = await db.select({ count: sql<number>`count(*)` })
+                    .from(crawlChapters)
+                    .where(and(eq(crawlChapters.jobId, job.id), eq(crawlChapters.status, 'pending')));
+
+                const pendingCount = Number(pendingCountInfo[0]?.count || 0);
+                const remainder = pendingCount % mergeSize;
+                const missingForFullBatch = remainder === 0 ? 0 : mergeSize - remainder;
+
+                // Send Telegram logic
+                const msg = `🆕 **Cập Nhật Truyện**: ${work.title}\n` +
+                    `⚡ Vừa ra thêm ${newChaptersCount} chương mới (đến chương ${newTotalChapters})!\n` +
+                    (missingForFullBatch > 0
+                        ? `⏳ Đang đợi thêm ${missingForFullBatch} chương nữa để gộp đủ 1 cục tóm tắt (${mergeSize} chương/cục). Hiện có ${pendingCount}/${mergeSize}.`
+                        : `✅ Đã đủ lượng chương dồn để tóm tắt (${pendingCount}/${mergeSize}). Tiến trình auto-crawl sẽ tự động xử lý!`);
+
+                await telegramService.sendInfoAlert(msg);
+            }
+        } catch (e: any) {
+            console.error(`❌ Error checking updates for ${work.title}:`, e.message);
+        }
+    }
 }
 

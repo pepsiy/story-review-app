@@ -145,6 +145,23 @@ Tất cả chapters đã được tóm tắt thành công!
     }
 
     /**
+     * Send general info alert (bypasses specific type toggle, only checks global toggle)
+     */
+    async sendInfoAlert(message: string) {
+        if (!this.bot || !this.chatId) return;
+        try {
+            const alertsEnabled = await this.isAlertsEnabled();
+            if (!alertsEnabled) return;
+
+            const formattedMessage = `ℹ️ *Auto-Crawl Update*\n\n${message}`;
+            await this.bot.sendMessage(this.chatId, formattedMessage, { parse_mode: 'Markdown' });
+            console.log(`📱 Telegram info alert sent`);
+        } catch (error: any) {
+            console.error('❌ Failed to send Telegram info alert:', error.message);
+        }
+    }
+
+    /**
      * Check if specific alert type is enabled
      */
     private async isAlertTypeEnabled(type: AlertType): Promise<boolean> {
