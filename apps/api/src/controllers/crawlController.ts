@@ -205,6 +205,22 @@ export async function processBatchBackground(jobId: number, count: number, workT
         const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
         if (!job) return;
 
+        // Prevent concurrent overlaps if called from cron while already running
+        if (job.status === 'processing') {
+            const lastProcessed = job.lastProcessedAt ? new Date(job.lastProcessedAt).getTime() : 0;
+            // If it's been processing for less than 15 minutes, assume it's still alive and skip overlap.
+            if (Date.now() - lastProcessed < 15 * 60 * 1000) {
+                console.log(`[Batch Debug] Job ${jobId} is currently processing (locked). Skipping overlap.`);
+                return;
+            }
+            console.log(`[Batch Debug] Job ${jobId} was stuck in processing. Resuming.`);
+        }
+
+        // Lock the job immediately
+        await db.update(crawlJobs)
+            .set({ status: 'processing', lastProcessedAt: new Date() })
+            .where(eq(crawlJobs.id, jobId));
+
         console.log(`[Batch Debug] Job Data:`, JSON.stringify(job, null, 2));
 
         // UNIFIED LOGIC: "Batch Size" in UI = "Merge Size" (chaptersPerSummary)
@@ -473,23 +489,44 @@ export async function processBatchBackground(jobId: number, count: number, workT
                 console.error(`❌ Error processing chunk ${chunkTitle}:`, error.message);
                 emitLog(`❌ Failed Chunk ${chunkTitle}: ${error.message}`, 'error', jobId);
 
-                // Mark all in chunk as failed
-                await db.update(crawlChapters)
-                    .set({
-                        status: 'failed',
-                        error: error.message,
-                        retryCount: sql`${crawlChapters.retryCount} + 1`
-                    })
-                    .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
+                const currentRetryCount = chunk[0].retryCount || 0;
+                const isTimeout = error.message.toLowerCase().includes('timeout') || error.message.toLowerCase().includes('browser');
 
-                errorCount++;
+                if (isTimeout && currentRetryCount < 3) {
+                    console.log(`⏳ Auto-retry triggered for chunk ${chunkTitle} (Attempt ${currentRetryCount + 1}/3)`);
+                    emitLog(`⏳ Timeout detected. Retrying later (Attempt ${currentRetryCount + 1}/3)...`, 'warning', jobId);
 
-                // Send Alert
-                await telegramService.sendAlert('error',
-                    telegramService.formatErrorAlert(workTitle, startChap, error.message, jobId)
-                );
+                    // Revert chunk to pending for next cron pass
+                    await db.update(crawlChapters)
+                        .set({
+                            status: 'pending',
+                            error: `Timeout: auto-retrying (${currentRetryCount + 1}/3)`,
+                            retryCount: sql`${crawlChapters.retryCount} + 1`
+                        })
+                        .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
 
-                break; // Stop batch on error
+                    // We don't increment errorCount so the job remains 'ready' and autoMode stays enabled.
+                    // But we break the loop to allow the system to rest before next cron tick.
+                    break;
+                } else {
+                    // Mark all in chunk as totally failed
+                    await db.update(crawlChapters)
+                        .set({
+                            status: 'failed',
+                            error: error.message,
+                            retryCount: sql`${crawlChapters.retryCount} + 1`
+                        })
+                        .where(sql`${crawlChapters.id} IN ${chunk.map(c => c.id)}`);
+
+                    errorCount++;
+
+                    // Send Alert
+                    await telegramService.sendAlert('error',
+                        telegramService.formatErrorAlert(workTitle, startChap, error.message, jobId)
+                    );
+
+                    break; // Stop batch on fatal error
+                }
             }
         }
 
