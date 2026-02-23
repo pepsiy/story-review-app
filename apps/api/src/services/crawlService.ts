@@ -468,55 +468,79 @@ export class CrawlService {
     }
 
     private async crawlChapterContent_xtruyen(chapterUrl: string): Promise<string> {
+        let browser;
         try {
-            let normalizedUrl = this.normalizeXtruyenUrl(chapterUrl);
-
-            // Bypass WP-Manga AJAX content loading by forcing the ?style=list parameter
-            // This makes the server return the full chapter HTML directly instead of an empty div
-            const parsedUrl = new URL(normalizedUrl);
-            parsedUrl.searchParams.set('style', 'list');
-            normalizedUrl = parsedUrl.toString();
-
+            const normalizedUrl = this.normalizeXtruyenUrl(chapterUrl);
             if (normalizedUrl !== chapterUrl) console.log(`🔧 Normalized URL: ${chapterUrl} → ${normalizedUrl}`);
-            const html = await this.fetchXtruyen(normalizedUrl);
-            const $ = cheerio.load(html);
 
-            // Remove navigation, ads, and unwanted elements (including inline ads in content)
-            $('.chapter-nav, .nav-buttons, .ads, .ad-container, .slider-container, ' +
-                '[class*="shopee"], [id*="ads"], [id*="Slider"], script, style, ' +
-                'select, option, .select-pagination, .c-selectpicker, form, .post-rating, .author-content, .genres-content, .tags-content, #comments, .comments-area').remove();
+            // Require puppeteer dynamically to avoid top-level load overhead when not needed
+            const puppeteer = require('puppeteer');
+            browser = await puppeteer.launch({
+                headless: 'new',
+                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+            });
 
-            // Primary selector: #chapter-reading-content (div.text-left > div#chapter-reading-content)
-            // Fallback selectors for future layout changes
-            let content = '';
-            const selectors = [
-                '#chapter-reading-content',
-                '.text-left #chapter-reading-content',
-                '.reading-content-wrap .content-area',
-                '.entry-content',
-                '.chapter-content',
-            ];
-
-            for (const selector of selectors) {
-                const el = $(selector);
-                if (el.length > 0) {
-                    content = el.text().trim();
-                    if (content.length > 100) {
-                        console.log(`📖 xtruyen content via "${selector}" (${content.length} chars)`);
-                        break;
-                    }
+            const page = await browser.newPage();
+            // Speed up by blocking unrelated resources
+            await page.setRequestInterception(true);
+            page.on('request', (req: any) => {
+                if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
+                    req.abort();
+                } else {
+                    req.continue();
                 }
+            });
+
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+            console.log(`🚀 [Puppeteer] Fetching Xtruyen chapter: ${normalizedUrl}`);
+            await page.goto(normalizedUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+
+            // Wait for Xtruyen AJAX to inject the main text (checking for >50 chars)
+            try {
+                await page.waitForFunction(() => {
+                    const el = document.querySelector('#chapter-reading-content');
+                    return el && el.textContent && el.textContent.trim().length > 50;
+                }, { timeout: 15000 });
+            } catch (e) {
+                console.log(`⚠️ [Puppeteer] Timeout waiting for content to populate, extracting whatever is available.`);
             }
 
+            const html = await page.evaluate(() => {
+                const el = document.querySelector('#chapter-reading-content');
+                return el ? el.innerHTML : '';
+            });
+
+            const $ = cheerio.load(html || '');
+
+            // Remove typical shortcodes/ad components that might end up inside paragraph wrappers
+            $('[class*="shopee"], [id*="ads"], script, style, .ads, .ad-container').remove();
+
+            // Re-format paragraphs correctly by treating <br> as newline marker
+            $('body').find('br').replaceWith('\n');
+            const rawText = $('body').text();
+
+            const paragraphs: string[] = [];
+            rawText.split(/\n+/).forEach(line => {
+                const t = line.trim();
+                // Filter out the known noise phrases the user reported
+                if (t && t.length > 5 && !t.includes('CẢM NGHĨ CỦA BẠN') && !t.includes('Màu nền Font chữ') && !t.includes('Danh sách')) {
+                    paragraphs.push(`<p>${t}</p>`);
+                }
+            });
+
+            const content = paragraphs.join('');
 
             if (!content || content.length < 50) {
-                throw new Error('No content found in chapter page');
+                console.log(`⚠️ Empty content returned for chapter ${normalizedUrl}, might be blocked. Return placeholder.`);
+                return '<p>Không thể lấy nội dung chương. JavaScript có thể đã bị chặn hoặc timeout.</p>';
             }
 
-            return this.cleanRawText(content);
+            return content;
         } catch (error: any) {
             console.error(`❌ Error crawling content (xtruyen) ${chapterUrl}:`, error.message);
             throw new Error(`Failed to crawl chapter content from xtruyen: ${error.message}`);
+        } finally {
+            if (browser) await browser.close();
         }
     }
 
