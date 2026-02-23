@@ -41,9 +41,22 @@ export const scanAndFixGaps = async (req: Request, res: Response) => {
             )
         });
 
-        // 4. Find completely missing chapters (Compare with total limit if known, or just check sequence gaps in crawl_chapters)
-        // For now, we trust the 'failed' and 'stuck' detection mostly. 
-        // Real gaps (missing records) are harder without a known max chapter, but we can check if we have gaps in numbering.
+        // 4. Find completely missing chapters (User deleted from UI, but marked as completed here)
+        const completedChapters = await db.query.crawlChapters.findMany({
+            where: and(
+                eq(crawlChapters.jobId, job.id),
+                eq(crawlChapters.status, 'completed')
+            )
+        });
+
+        // Get all public chapters for this work
+        const publicChapters = await db.query.chapters.findMany({
+            where: eq(chapters.workId, workId),
+            columns: { chapterNumber: true }
+        });
+        const existingPublicChapterNumbers = new Set(publicChapters.map(c => c.chapterNumber));
+
+        const chaptersPerSummary = job.chaptersPerSummary || 1;
 
         const updates = [];
         const fixedIds = [];
@@ -56,6 +69,16 @@ export const scanAndFixGaps = async (req: Request, res: Response) => {
         // Fix Stuck
         for (const ch of stuckChapters) {
             updates.push(ch.id);
+        }
+
+        // Fix Missing Summaries
+        let missingSummaryCount = 0;
+        for (const ch of completedChapters) {
+            const expectedSummaryChapNum = Math.floor((ch.chapterNumber - 1) / chaptersPerSummary) + 1;
+            if (!existingPublicChapterNumbers.has(expectedSummaryChapNum)) {
+                updates.push(ch.id);
+                missingSummaryCount++;
+            }
         }
 
         if (updates.length > 0) {
@@ -90,7 +113,7 @@ export const scanAndFixGaps = async (req: Request, res: Response) => {
 
         res.json({
             success: true,
-            message: `Scanned. Reset ${fixedIds.length} chapters (Failed: ${failedChapters.length}, Stuck: ${stuckChapters.length}). Processing triggered.`,
+            message: `Scanned. Reset ${fixedIds.length} chapters (Failed: ${failedChapters.length}, Stuck: ${stuckChapters.length}, Missing Summary: ${missingSummaryCount}). Processing triggered.`,
             fixedCount: fixedIds.length,
             gaps: [] // TODO: Implement sequence gap detection if needed
         });
