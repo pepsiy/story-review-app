@@ -430,7 +430,14 @@ export class CrawlService {
 
     private async crawlChapterContent_xtruyen(chapterUrl: string): Promise<string> {
         try {
-            const normalizedUrl = this.normalizeXtruyenUrl(chapterUrl);
+            let normalizedUrl = this.normalizeXtruyenUrl(chapterUrl);
+
+            // Bypass WP-Manga AJAX content loading by forcing the ?style=list parameter
+            // This makes the server return the full chapter HTML directly instead of an empty div
+            const parsedUrl = new URL(normalizedUrl);
+            parsedUrl.searchParams.set('style', 'list');
+            normalizedUrl = parsedUrl.toString();
+
             if (normalizedUrl !== chapterUrl) console.log(`🔧 Normalized URL: ${chapterUrl} → ${normalizedUrl}`);
             const html = await this.fetchXtruyen(normalizedUrl);
             const $ = cheerio.load(html);
