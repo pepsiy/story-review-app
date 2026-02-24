@@ -209,6 +209,8 @@ export async function processBatchBackground(jobId: number, count: number, workT
         const job = await db.query.crawlJobs.findFirst({ where: eq(crawlJobs.id, jobId) });
         if (!job) return;
 
+        const work = await db.query.works.findFirst({ where: eq(works.id, job.workId!) });
+
         // Prevent concurrent overlaps if called from cron while already running
         if (job.status === 'processing') {
             const lastProcessed = job.lastProcessedAt ? new Date(job.lastProcessedAt).getTime() : 0;
@@ -269,7 +271,22 @@ export async function processBatchBackground(jobId: number, count: number, workT
         // Group chapters into chunks
         const chunks = [];
         for (let i = 0; i < pendingChapters.length; i += mergeSize) {
-            chunks.push(pendingChapters.slice(i, i + mergeSize));
+            const chunk = pendingChapters.slice(i, i + mergeSize);
+
+            // If the story is ONGOING and this chunk is partial, wait for more chapters.
+            if (chunk.length < mergeSize && work?.status === 'ONGOING') {
+                console.log(`[Batch Debug] Job ${jobId}: Partial chunk (${chunk.length}/${mergeSize}) for ONGOING story. Skipping to wait for more chapters.`);
+                continue;
+            }
+            chunks.push(chunk);
+        }
+
+        if (chunks.length === 0) {
+            console.log(`[Batch Debug] Job ${jobId}: No full chunks ready. Returning job to ready state.`);
+            await db.update(crawlJobs)
+                .set({ status: 'ready' })
+                .where(eq(crawlJobs.id, jobId));
+            return;
         }
 
         console.log(`📦 Processing ${chunks.length} chunks (Merge Size: ${mergeSize})...`);

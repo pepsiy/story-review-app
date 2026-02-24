@@ -170,16 +170,22 @@ async function checkOngoingStoriesUpdates() {
 
                 const pendingCount = Number(pendingCountInfo[0]?.count || 0);
                 const remainder = pendingCount % mergeSize;
+                const fullBatches = Math.floor(pendingCount / mergeSize);
                 const missingForFullBatch = remainder === 0 ? 0 : mergeSize - remainder;
 
                 // Send Telegram logic
-                const msg = `🆕 **Cập Nhật Truyện**: ${work.title}\n` +
-                    `⚡ Vừa ra thêm ${newChaptersCount} chương mới (đến chương ${newTotalChapters})!\n` +
-                    (missingForFullBatch > 0
-                        ? `⏳ Đang đợi thêm ${missingForFullBatch} chương nữa để gộp đủ 1 cục tóm tắt (${mergeSize} chương/cục). Hiện có ${pendingCount}/${mergeSize}.`
-                        : `✅ Đã đủ lượng chương dồn để tóm tắt (${pendingCount}/${mergeSize}). Tiến trình auto-crawl sẽ tự động xử lý!`);
+                let telegramMsg = `🆕 **Cập Nhật Truyện**: ${work.title}\n` +
+                    `⚡ Vừa ra thêm ${newChaptersCount} chương mới (đến chương ${newTotalChapters})!\n`;
 
-                await telegramService.sendInfoAlert(msg);
+                if (fullBatches > 0) {
+                    telegramMsg += `✅ Hệ thống đã gom đủ ${fullBatches} cục tóm tắt (${mergeSize} chương/cục) và đang tự động xử lý.\n`;
+                }
+
+                if (remainder > 0) {
+                    telegramMsg += `⏳ Đang đợi thêm ${missingForFullBatch} chương nữa để gộp thành cục tiếp theo. Hiện dư ${remainder}/${mergeSize}.`;
+                }
+
+                await telegramService.sendInfoAlert(telegramMsg.trim());
             }
         } catch (e: any) {
             console.error(`❌ Error checking updates for ${work.title}:`, e.message);
