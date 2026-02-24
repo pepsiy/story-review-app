@@ -104,8 +104,8 @@ export function AFKCombatOverlay({ userId, mapId, onComplete }: AFKCombatOverlay
         // Initial poll
         pollProgress();
 
-        // Poll every 2 seconds
-        const interval = setInterval(pollProgress, 2000);
+        // Poll every 5 seconds (Reduced from 2s to save DB compute)
+        const interval = setInterval(pollProgress, 5000);
 
         return () => clearInterval(interval);
     }, [userId, onComplete]);

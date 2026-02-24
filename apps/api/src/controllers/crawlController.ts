@@ -6,6 +6,7 @@ import { crawlService } from "../services/crawlService";
 import { telegramService } from "../services/telegramService";
 import { summarizeChapter } from "../services/aiService";
 import { emitLog } from "../services/socketService";
+import { wakeupCron } from "../services/crawlCron";
 
 /**
  * Initialize crawl job - Crawl all chapter URLs
@@ -180,6 +181,9 @@ export const processBatch = async (req: Request, res: Response) => {
         const work = await db.query.works.findFirst({
             where: eq(works.id, job.workId!)
         });
+
+        // Awaken cron immediately if it was sleeping
+        wakeupCron();
 
         // Process in background
         processBatchBackground(parseInt(jobId), count, work?.title || 'Unknown');
@@ -706,6 +710,10 @@ export const toggleAutoMode = async (req: Request, res: Response) => {
         await db.update(crawlJobs)
             .set({ autoMode })
             .where(eq(crawlJobs.id, parseInt(jobId)));
+
+        if (autoMode) {
+            wakeupCron();
+        }
 
         res.json({ message: `Auto mode ${autoMode ? 'enabled' : 'disabled'}` });
     } catch (error: any) {

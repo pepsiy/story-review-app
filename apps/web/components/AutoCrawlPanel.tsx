@@ -68,11 +68,18 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
     useEffect(() => {
         checkExistingJob();
         const interval = setInterval(() => {
-            if (job) refreshJobStatus();
-        }, 5000); // Refresh every 5s
+            if (job) {
+                // NEON DB OPTIMIZATION: Stop 5s polling if job is dead 
+                // to allow database to Scale to Zero.
+                const isActive = ['initializing', 'crawling', 'processing', 'ready'].includes(job.status);
+                if (isActive) {
+                    refreshJobStatus();
+                }
+            }
+        }, 5000); // Refresh every 5s conditionally
 
         return () => clearInterval(interval);
-    }, [workId, job?.id]);
+    }, [workId, job?.id, job?.status]);
 
     // Sync local state when job loads
     useEffect(() => {
@@ -331,8 +338,8 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                         {/* TruyenFull */}
                         <label
                             className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${sourceOption === 'truyenfull'
-                                    ? 'border-blue-500 bg-blue-50'
-                                    : 'border-gray-200 hover:border-gray-300'
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300'
                                 }`}
                         >
                             <input
@@ -354,8 +361,8 @@ export function AutoCrawlPanel({ workId, workTitle }: { workId: string; workTitl
                         {/* XTruyen */}
                         <label
                             className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${sourceOption === 'xtruyen'
-                                    ? 'border-indigo-500 bg-indigo-50'
-                                    : 'border-gray-200 hover:border-gray-300'
+                                ? 'border-indigo-500 bg-indigo-50'
+                                : 'border-gray-200 hover:border-gray-300'
                                 }`}
                         >
                             <input

@@ -7,6 +7,18 @@ import { summarizeChapter } from '../services/aiService';
 import { processBatchBackground } from '../controllers/crawlController';
 import { telegramService } from '../services/telegramService';
 
+let idleQueryCount = 0;
+let sleepCyclesRemaining = 0;
+
+/**
+ * Wake up the cron job immediately (reset backoff)
+ */
+export function wakeupCron() {
+    idleQueryCount = 0;
+    sleepCyclesRemaining = 0;
+    console.log('⏰ [Neon Sleep Mode] Auto-crawl cron awakened by user action!');
+}
+
 /**
  * Cron job: Tự động xử lý các job có autoMode = true
  * Chạy mỗi 2 phút
@@ -15,6 +27,13 @@ export function startCrawlCron() {
     // Chạy mỗi 2 phút
     cron.schedule('*/2 * * * *', async () => {
         try {
+            // Neon DB Scale-to-Zero Optimization
+            if (sleepCyclesRemaining > 0) {
+                sleepCyclesRemaining--;
+                console.log(`💤 [Neon Sleep Mode] Crawl cron sleeping... (${sleepCyclesRemaining} cycles left)`);
+                return;
+            }
+
             // Check global auto mode setting
             const globalAutoSetting = await db.query.systemSettings.findFirst({
                 where: eq(systemSettings.key, 'crawl_auto_mode_enabled')
@@ -27,8 +46,6 @@ export function startCrawlCron() {
             }
 
             // Find jobs with autoMode = true and status = ready/processing
-            // Note: We include 'processing' if stuck? No, processBatchBackground checks stuck jobs.
-            // But cron typically looks for 'ready'.
             const jobs = await db.query.crawlJobs.findMany({
                 where: and(
                     eq(crawlJobs.autoMode, true),
@@ -38,8 +55,17 @@ export function startCrawlCron() {
             });
 
             if (jobs.length === 0) {
+                idleQueryCount++;
+                if (idleQueryCount >= 5) {
+                    // Start sleep mode for 30 mins (15 cycles * 2 mins = 30 mins, minus the current one = 14)
+                    sleepCyclesRemaining = 14;
+                    console.log('🌙 [Neon Sleep Mode] No active jobs for 10 mins. Cron entering 30-minute deep sleep to save DB compute.');
+                }
                 return;
             }
+
+            // Reset backoff since we found jobs
+            idleQueryCount = 0;
 
             console.log(`🤖 Auto-cron: Processing ${jobs.length} jobs...`);
 
