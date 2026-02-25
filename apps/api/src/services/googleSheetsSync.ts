@@ -1,4 +1,5 @@
 import { db, users, works, chapters, reviews } from "@repo/db";
+import { sql } from "drizzle-orm";
 import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
 import cron from "node-cron";
@@ -55,12 +56,12 @@ export async function syncDatabaseToSheets() {
 
             // Lấy data đã cập nhật từ DB (Delta Sync)
             // Chú ý: Vì Drizzle không hỗ trợ cú pháp > động, ta dùng raw SQL
-            const newRecordsCall = await db.execute(`
+            const newRecordsCall = await db.execute(sql.raw(`
         SELECT * FROM "${table.tableName}"
         WHERE updated_at > '${lastSyncTime.toISOString()}'
         ORDER BY updated_at ASC
         LIMIT 1000
-      `);
+      `));
 
             const newRecords = newRecordsCall.rows || newRecordsCall;
 
