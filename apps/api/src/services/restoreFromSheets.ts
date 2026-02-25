@@ -31,10 +31,50 @@ export async function restoreFromSheets() {
         // Khôi phục theo thứ tự bảng để tránh xung đột khóa ngoại (Foreign Keys)
         // Parent first, child later
         const tablesToSync = [
+            // Core
             { name: "Users", tableName: "user" },
             { name: "Works", tableName: "works" },
             { name: "Chapters", tableName: "chapters" },
-            { name: "Reviews", tableName: "reviews" }
+            { name: "Reviews", tableName: "reviews" },
+            { name: "Comments", tableName: "comments" },
+            { name: "Favorites", tableName: "favorites" },
+            { name: "SeoMeta", tableName: "seo_meta" },
+
+            // Social & Custom
+            { name: "Genres", tableName: "genres" },
+            { name: "Friendships", tableName: "friendships" },
+            { name: "ChatMessages", tableName: "chat_messages" },
+            { name: "SystemSettings", tableName: "system_settings" },
+
+            // Game - Farm & Items
+            { name: "Inventory", tableName: "inventory" },
+            { name: "FarmPlots", tableName: "farm_plots" },
+            { name: "GameItems", tableName: "game_items" },
+            { name: "GameLogs", tableName: "game_logs" },
+
+            // Game - Missions
+            { name: "Missions", tableName: "missions" },
+            { name: "UserMissions", tableName: "user_missions" },
+
+            // Game - PVE / PVP
+            { name: "Beasts", tableName: "beasts" },
+            { name: "UserBeastEncounters", tableName: "user_beast_encounters" },
+            { name: "RaidLogs", tableName: "raid_logs" },
+            { name: "RaidProtection", tableName: "raid_protection" },
+            { name: "ArenaBattles", tableName: "arena_battles" },
+            { name: "RankingRewards", tableName: "ranking_rewards" },
+            { name: "Sects", tableName: "sects" },
+
+            // Game - Turn Based Combat
+            { name: "Skills", tableName: "skills" },
+            { name: "UserSkills", tableName: "user_skills" },
+            { name: "SkillBooks", tableName: "skill_books" },
+            { name: "CombatSessions", tableName: "combat_sessions" },
+            { name: "EnemySkills", tableName: "enemy_skills" },
+
+            // Auto-Crawl System
+            { name: "CrawlJobs", tableName: "crawl_jobs" },
+            { name: "CrawlChapters", tableName: "crawl_chapters" }
         ];
 
         for (const table of tablesToSync) {

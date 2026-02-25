@@ -42,14 +42,18 @@ export async function syncDatabaseToSheets() {
             { name: "Works", tableName: "works" },
             { name: "Chapters", tableName: "chapters" },
             { name: "Reviews", tableName: "reviews" },
+            { name: "Comments", tableName: "comments" },
+            { name: "Favorites", tableName: "favorites" },
+            { name: "SeoMeta", tableName: "seo_meta" },
 
             // Social & Custom
             { name: "Genres", tableName: "genres" },
             { name: "Friendships", tableName: "friendships" },
+            { name: "ChatMessages", tableName: "chat_messages" },
             { name: "SystemSettings", tableName: "system_settings" },
 
             // Game - Farm & Items
-            { name: "UserItems", tableName: "user_items" },
+            { name: "Inventory", tableName: "inventory" },
             { name: "FarmPlots", tableName: "farm_plots" },
             { name: "GameItems", tableName: "game_items" },
             { name: "GameLogs", tableName: "game_logs" },
@@ -64,7 +68,19 @@ export async function syncDatabaseToSheets() {
             { name: "RaidLogs", tableName: "raid_logs" },
             { name: "RaidProtection", tableName: "raid_protection" },
             { name: "ArenaBattles", tableName: "arena_battles" },
-            { name: "Sects", tableName: "sects" }
+            { name: "RankingRewards", tableName: "ranking_rewards" },
+            { name: "Sects", tableName: "sects" },
+
+            // Game - Turn Based Combat
+            { name: "Skills", tableName: "skills" },
+            { name: "UserSkills", tableName: "user_skills" },
+            { name: "SkillBooks", tableName: "skill_books" },
+            { name: "CombatSessions", tableName: "combat_sessions" },
+            { name: "EnemySkills", tableName: "enemy_skills" },
+
+            // Auto-Crawl System
+            { name: "CrawlJobs", tableName: "crawl_jobs" },
+            { name: "CrawlChapters", tableName: "crawl_chapters" }
         ];
 
         const currentSyncStart = new Date();
