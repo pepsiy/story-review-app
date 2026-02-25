@@ -37,10 +37,34 @@ export async function syncDatabaseToSheets() {
 
         // Khởi tạo các Sheet nếu chưa có (1 bảng = 1 sheet con)
         const tablesToSync = [
+            // Core
             { name: "Users", tableName: "user" },
             { name: "Works", tableName: "works" },
             { name: "Chapters", tableName: "chapters" },
-            { name: "Reviews", tableName: "reviews" }
+            { name: "Reviews", tableName: "reviews" },
+
+            // Social & Custom
+            { name: "Genres", tableName: "genres" },
+            { name: "Friendships", tableName: "friendships" },
+            { name: "SystemSettings", tableName: "system_settings" },
+
+            // Game - Farm & Items
+            { name: "UserItems", tableName: "user_items" },
+            { name: "FarmPlots", tableName: "farm_plots" },
+            { name: "GameItems", tableName: "game_items" },
+            { name: "GameLogs", tableName: "game_logs" },
+
+            // Game - Missions
+            { name: "Missions", tableName: "missions" },
+            { name: "UserMissions", tableName: "user_missions" },
+
+            // Game - PVE / PVP
+            { name: "Beasts", tableName: "beasts" },
+            { name: "UserBeastEncounters", tableName: "user_beast_encounters" },
+            { name: "RaidLogs", tableName: "raid_logs" },
+            { name: "RaidProtection", tableName: "raid_protection" },
+            { name: "ArenaBattles", tableName: "arena_battles" },
+            { name: "Sects", tableName: "sects" }
         ];
 
         const currentSyncStart = new Date();
