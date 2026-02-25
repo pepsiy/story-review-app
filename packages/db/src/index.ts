@@ -22,6 +22,23 @@ const pool2 = url2 ? new Pool({ connectionString: getCleanUrl(url2) }) : null;
 let isFailingOver = false;
 let currentPool = (activeNeon === '2' && pool2) ? pool2 : pool1;
 
+// Prevent unhandled errors from crashing the Node instance
+pool1.on('error', (err: any) => {
+    const isQuotaError = err?.code === 'XX000' || err?.message?.includes('endpoint is currently disabled') || err?.message?.includes('quota');
+    if (isQuotaError && pool2 && !isFailingOver) {
+        console.warn(`[HA Database] NEON 1 Pool emitted Quota Error! Auto-failing over to NEON 2...`);
+        isFailingOver = true;
+    } else {
+        console.error('[HA Database Pool 1] Unexpected background error:', err?.message || err);
+    }
+});
+
+if (pool2) {
+    pool2.on('error', (err: any) => {
+        console.error('[HA Database Pool 2] Unexpected background error:', err?.message || err);
+    });
+}
+
 const proxyPool = {
     ...currentPool,
     query: async (text: string, values?: any[]) => {
