@@ -15,6 +15,7 @@ export const works = pgTable('works', {
     status: text('status').default('ONGOING'), // ONGOING, COMPLETED, DROPPED
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         slugIdx: index('slug_idx').on(table.slug),
@@ -44,6 +45,8 @@ export const chapters = pgTable('chapters', {
 
     status: text('status').default('DRAFT'), // DRAFT, PUBLISHED
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         workIdIdx: index('work_id_idx').on(table.workId),
@@ -64,6 +67,8 @@ export const reviews = pgTable('reviews', {
     protectionUntil: timestamp('protection_until'), // Protection cooldown after being raided
 
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Bảng Thể loại (Dynamic Genres)
@@ -73,6 +78,8 @@ export const genres = pgTable('genres', {
     slug: text('slug').notNull().unique(),
     description: text('description'),
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Bảng Cấu hình Hệ thống (System Settings)
@@ -80,6 +87,7 @@ export const systemSettings = pgTable('system_settings', {
     key: text('key').primaryKey(), // e.g., 'GEMINI_API_KEY'
     value: text('value').notNull(),
     updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Bảng SEO Meta (Dùng chung cho cả Work và Chapter)
@@ -89,7 +97,9 @@ export const seoMeta = pgTable('seo_meta', {
     entityId: integer('entity_id').notNull(),
     title: text('title'), // Thẻ title tùy chỉnh
     description: text('description'), // Meta description
-    ogImage: text('og_image'), // Ảnh share FB/Zalo
+    ogImage: text('og_image'), // Ảnh share FB/Zalo,
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         entityIdx: index('entity_idx').on(table.entityType, table.entityId),
@@ -184,7 +194,9 @@ export const users = pgTable("user", {
     critRate: integer("crit_rate").default(5), // Base 5%
     critDamage: integer("crit_damage").default(150), // Base 150%
     dodgeRate: integer("dodge_rate").default(5), // Base 5%
-    element: text("element"), // 'fire' | 'water' | 'earth' | 'wind' | 'lightning' | 'ice' | 'dark' | 'light' | null
+    element: text("element"), // 'fire' | 'water' | 'earth' | 'wind' | 'lightning' | 'ice' | 'dark' | 'light' | null,
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 export const accounts = pgTable(
@@ -203,7 +215,9 @@ export const accounts = pgTable(
         scope: text("scope"),
         id_token: text("id_token"),
         session_state: text("session_state"),
-    },
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
+},
     (account) => ({
         compoundKey: index('account_provider_idx').on(account.provider, account.providerAccountId),
     })
@@ -215,6 +229,8 @@ export const sessions = pgTable("session", {
         .notNull()
         .references(() => users.id, { onDelete: "cascade" }),
     expires: timestamp("expires", { mode: "date" }).notNull(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 export const verificationTokens = pgTable(
@@ -223,7 +239,9 @@ export const verificationTokens = pgTable(
         identifier: text("identifier").notNull(),
         token: text("token").notNull(),
         expires: timestamp("expires", { mode: "date" }).notNull(),
-    },
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
+},
     (verificationToken) => ({
         // compositePk: primaryKey({ columns: [verificationToken.identifier, verificationToken.token] }),
         // Drizzle specific composite key handling might differ slightly, using unique index for now or standard comp key
@@ -239,6 +257,8 @@ export const comments = pgTable('comments', {
     chapterId: integer('chapter_id').references(() => chapters.id), // Comment on a Chapter (optional)
     content: text('content').notNull(),
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Chat Messages Table
@@ -247,7 +267,9 @@ export const chatMessages = pgTable('chat_messages', {
     userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
     content: text('content').notNull(),
     createdAt: timestamp('created_at').defaultNow(),
-    isFlagged: boolean('is_flagged').default(false), // Cho kiểm duyệt
+    isFlagged: boolean('is_flagged').default(false), // Cho kiểm duyệt,
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Bảng Yêu thích (Favorites/Library)
@@ -256,6 +278,8 @@ export const favorites = pgTable('favorites', {
     userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
     workId: integer('work_id').references(() => works.id, { onDelete: 'cascade' }).notNull(),
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userWorkIdx: index('user_work_idx').on(table.userId, table.workId), // Unique checking optimization
@@ -273,7 +297,9 @@ export const inventory = pgTable('inventory', {
     itemId: text('item_id').notNull(), // 'seed_carrot', 'herb_linh_thao'
     quantity: integer('quantity').default(0).notNull(),
     type: text('type').notNull(), // 'SEED', 'PRODUCT', 'CONSUMABLE'
-    isEquipped: boolean('is_equipped').default(false), // For RPG equipment
+    isEquipped: boolean('is_equipped').default(false), // For RPG equipment,
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userItemIdx: index('user_item_idx').on(table.userId, table.itemId),
@@ -295,6 +321,8 @@ export const farmPlots = pgTable('farm_plots', {
 
     // Phase 6: Protection Array
     protectionExpiresAt: timestamp('protection_expires_at'),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userPlotIdx: index('user_plot_idx').on(table.userId, table.plotIndex),
@@ -310,6 +338,8 @@ export const gameLogs = pgTable('game_logs', {
     description: text('description'), // "A đã tưới nước cho B", "Mở khóa ô đất số 4"
     metadata: text('metadata'), // JSON string for details
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userActionIdx: index('game_log_user_idx').on(table.userId),
@@ -338,7 +368,9 @@ export const gameItems = pgTable('game_items', {
     icon: text('icon'), // Emoji or URL
 
     // Recipe (cho Luyện đan) - JSON Array: [{ "itemId": "herb_a", "quantity": 10 }]
-    ingredients: text('ingredients'), // JSON stringified
+    ingredients: text('ingredients'), // JSON stringified,
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Bảng Nhiệm Vụ (Mission/Quest Definitions)
@@ -366,6 +398,8 @@ export const missions = pgTable('missions', {
     rewardItems: text('reward_items'), // JSON: [{ "itemId": "pill_x", "quantity": 1 }]
 
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Bảng Theo dõi Nhiệm vụ người dùng (User Missions)
@@ -379,6 +413,8 @@ export const userMissions = pgTable('user_missions', {
 
     startedAt: timestamp('started_at').defaultNow(),
     completedAt: timestamp('completed_at'),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userMissionIdx: index('user_mission_idx').on(table.userId, table.status),
@@ -396,7 +432,9 @@ export const friendships = pgTable('friendships', {
 
     // Counters
     waterCount: integer('water_count').default(0), // Số lần tưới
-    stealCount: integer('steal_count').default(0), // Số lần trộm
+    stealCount: integer('steal_count').default(0), // Số lần trộm,
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userTargetIdx: index('user_target_idx').on(table.userId, table.targetUserId),
@@ -429,6 +467,8 @@ export const beasts = pgTable('beasts', {
     aiPattern: text('ai_pattern').default('balanced'), // 'aggressive' | 'defensive' | 'balanced'
 
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Bảng Giao Tranh với Quái (User Beast Encounters)
@@ -443,6 +483,8 @@ export const userBeastEncounters = pgTable('user_beast_encounters', {
 
     startedAt: timestamp('started_at').defaultNow(),
     completedAt: timestamp('completed_at'),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userActiveIdx: index('user_beast_active_idx').on(table.userId, table.status),
@@ -459,6 +501,8 @@ export const raidLogs = pgTable('raid_logs', {
     goldStolen: integer('gold_stolen').default(0),
 
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         attackerIdx: index('raid_attacker_idx').on(table.attackerId),
@@ -474,6 +518,8 @@ export const raidProtection = pgTable('raid_protection', {
     raidsToday: integer('raids_today').notNull().default(0),
     lastRaidDate: timestamp('last_raid_date'),
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userIdx: index('raid_protection_user_idx').on(table.userId),
@@ -493,6 +539,8 @@ export const arenaBattles = pgTable('arena_battles', {
     player2Reward: integer('player2_reward').default(0),
 
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         player1Idx: index('arena_player1_idx').on(table.player1Id),
@@ -506,7 +554,9 @@ export const rankingRewards = pgTable('ranking_rewards', {
     tier: text('tier').notNull().unique(),
     minPoints: integer('min_points').notNull(),
     rewardGold: integer('reward_gold').default(0),
-    rewardItems: text('reward_items'), // JSON array
+    rewardItems: text('reward_items'), // JSON array,
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Bảng Tông Môn (Sects)
@@ -520,6 +570,8 @@ export const sects = pgTable('sects', {
     resources: integer('resources').default(0), // Tài nguyên chung
 
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // ==================== AUTO-CRAWL SYSTEM ====================
@@ -557,6 +609,8 @@ export const crawlJobs = pgTable('crawl_jobs', {
 
     // Error tracking
     lastError: text('last_error'),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         workIdIdx: index('crawl_job_work_idx').on(table.workId),
@@ -581,6 +635,8 @@ export const skills = pgTable('skills', {
     animation: text('animation'), // Animation identifier
     cultivationReq: integer('cultivation_req').default(0), // Min cultivation level index
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // User's Learned Skills
@@ -592,6 +648,8 @@ export const userSkills = pgTable('user_skills', {
     timesUsed: integer('times_used').default(0),
     equippedSlot: integer('equipped_slot'), // 1-4, null = not equipped
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userSkillIdx: index('user_skill_idx').on(table.userId, table.skillId),
@@ -607,6 +665,8 @@ export const skillBooks = pgTable('skill_books', {
     icon: text('icon'), // Icon URL or identifier
     description: text('description'),
     createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 });
 
 // Active Combat Sessions
@@ -634,6 +694,7 @@ export const combatSessions = pgTable('combat_sessions', {
 
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         userIdx: index('combat_user_idx').on(table.userId),
@@ -647,7 +708,9 @@ export const enemySkills = pgTable('enemy_skills', {
     enemyId: text('enemy_id').notNull(), // Beast ID from beasts table
     skillId: text('skill_id').references(() => skills.id).notNull(),
     usageRate: integer('usage_rate').notNull(), // 0-100, AI probability
-    minTurn: integer('min_turn').default(1), // Earliest turn to use
+    minTurn: integer('min_turn').default(1), // Earliest turn to use,
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         enemyIdx: index('enemy_skill_idx').on(table.enemyId),
@@ -680,6 +743,8 @@ export const crawlChapters = pgTable('crawl_chapters', {
     createdAt: timestamp('created_at').defaultNow(),
     crawledAt: timestamp('crawled_at'),
     summarizedAt: timestamp('summarized_at'),
+    updatedAt: timestamp('updated_at').defaultNow(),
+    deletedAt: timestamp('deleted_at'),
 }, (table) => {
     return {
         jobChapterIdx: index('crawl_chapter_job_idx').on(table.jobId, table.chapterNumber),

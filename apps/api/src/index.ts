@@ -72,6 +72,7 @@ app.get("/health", (req, res) => {
 // Initialize services
 import { telegramService } from "./services/telegramService";
 import { startCrawlCron } from "./services/crawlCron";
+import { startGoogleSheetsWorker } from "./services/googleSheetsSync";
 
 async function initializeServices() {
   console.log("🔧 Initializing services...");
@@ -81,6 +82,9 @@ async function initializeServices() {
 
   // Start cron job for auto-crawl
   startCrawlCron();
+
+  // Start Background Sync Worker for Google Sheets HA Fallback
+  startGoogleSheetsWorker();
 
   console.log("✅ All services initialized");
 }
