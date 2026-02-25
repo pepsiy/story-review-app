@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { verifyAdminLogin } from "./actions";
 
 export default function AdminLoginPage() {
     const [username, setUsername] = useState("");
@@ -16,14 +17,11 @@ export default function AdminLoginPage() {
         e.preventDefault();
         setError("");
 
-        // Simple client-side check for demo (ideally server action)
-        // User requested: Nzu / Fdmedia123@#$
-        if (username === "Nzu" && password === "Fdmedia123@#$") {
-            // Set cookie
-            document.cookie = "admin_session=true; path=/; max-age=86400; SameSite=Strict";
+        const res = await verifyAdminLogin(username, password);
+        if (res.success) {
             router.push("/admin");
         } else {
-            setError("Sai tài khoản hoặc mật khẩu!");
+            setError(res.error || "Lỗi đăng nhập!");
         }
     };
 
