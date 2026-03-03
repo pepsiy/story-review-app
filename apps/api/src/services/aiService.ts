@@ -3,277 +3,198 @@ import { db, systemSettings } from "../../../../packages/db/src";
 import { eq } from "drizzle-orm";
 import { emitLog } from "./socketService";
 
-// --- SMART KEY MANAGER ---
+// --- SMART KEY MANAGER (Dual-Model Slots) ---
 
-interface KeyUsage {
+// 2 models per key – each model slot gets its own quota bucket
+const GEMINI_MODELS = ["gemini-3-flash-preview", "gemini-2.5-flash"] as const;
+const MODEL_RPD_LIMIT = 20;          // requests per day per model per key
+const TOTAL_RPD_PER_KEY = MODEL_RPD_LIMIT * GEMINI_MODELS.length; // 40
+
+interface SlotUsage {
     key: string;
-    cooldownUntil: number; // Timestamp when key is ready again
-    totalRequestsToday: number;
+    model: string;
+    requestsToday: number;
     lastDailyReset: number;
-    isDead: boolean; // If key is permanently invalid (400/403)
-    failedAttempts: number; // Track consecutive failures
+    cooldownUntil: number;
+    isDead: boolean;
+    failedAttempts: number;
 }
 
 class KeyManager {
-    private keys: Map<string, KeyUsage> = new Map();
-    private keyList: string[] = []; // To support Round Robin by index
-    private lastUsedIndex = -1; // Pointer for Round Robin
-
-    private readonly RATE_LIMIT_RPD = 40; // Strict limit: 40 requests per day per key
+    // slotId = `${apiKey}::${model}`
+    private slots: Map<string, SlotUsage> = new Map();
+    private slotList: string[] = [];
+    private lastUsedIndex = -1;
     private initialized = false;
 
-    constructor() { }
-
-    /**
-     * Get the timestamp for the most recent 15:00 UTC+7 (08:00 UTC)
-     */
     private getLastResetTime(now: number): number {
         const d = new Date(now);
-        // We want the most recent 08:00 UTC
+        // 15:00 UTC+7 = 08:00 UTC
         const resetToday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 8, 0, 0, 0));
-        if (now < resetToday.getTime()) {
-            // It hasn't reached 15:00 today yet, so the last reset was yesterday at 15:00
-            resetToday.setUTCDate(resetToday.getUTCDate() - 1);
-        }
+        if (now < resetToday.getTime()) resetToday.setUTCDate(resetToday.getUTCDate() - 1);
         return resetToday.getTime();
     }
 
-    /**
-     * Get the next reset time (Next 15:00 UTC+7)
-     */
     private getNextResetTime(now: number): number {
-        const lastReset = this.getLastResetTime(now);
-        return lastReset + 24 * 60 * 60 * 1000;
+        return this.getLastResetTime(now) + 24 * 60 * 60 * 1000;
     }
 
-    /**
-     * Load keys from DB and Env, initializing the manager
-     */
     async initialize() {
-        if (this.initialized && this.keys.size > 0) return;
+        if (this.initialized && this.slots.size > 0) return;
 
-        // 1. Try DB (Free/Standard Keys)
         let dbFreeKeys: string[] = [];
         try {
-            const dbKey = await db.query.systemSettings.findFirst({
-                where: eq(systemSettings.key, "GEMINI_API_KEY")
-            });
-            if (dbKey && dbKey.value) {
-                dbFreeKeys = dbKey.value.split(/[,\n]+/).map((k: string) => k.trim()).filter((k: string) => k.length > 0);
-            }
-        } catch (e) {
-            console.warn("⚠️ Failed to fetch keys from DB:", e);
-        }
+            const dbKey = await db.query.systemSettings.findFirst({ where: eq(systemSettings.key, "GEMINI_API_KEY") });
+            if (dbKey?.value) dbFreeKeys = dbKey.value.split(/[,\n]+/).map((k: string) => k.trim()).filter((k: string) => k);
+        } catch (e) { console.warn("⚠️ DB free keys error:", e); }
 
-        // 2. Try DB (Paid Keys)
         let dbPaidKeys: string[] = [];
         try {
-            const dbPaid = await db.query.systemSettings.findFirst({
-                where: eq(systemSettings.key, "GEMINI_PAID_KEYS")
-            });
-            if (dbPaid && dbPaid.value) {
-                dbPaidKeys = dbPaid.value.split(/[,\n]+/).map((k: string) => k.trim()).filter((k: string) => k.length > 0);
-            }
-        } catch (e) {
-            console.warn("⚠️ Failed to fetch paid keys from DB", e);
-        }
+            const dbPaid = await db.query.systemSettings.findFirst({ where: eq(systemSettings.key, "GEMINI_PAID_KEYS") });
+            if (dbPaid?.value) dbPaidKeys = dbPaid.value.split(/[,\n]+/).map((k: string) => k.trim()).filter((k: string) => k);
+        } catch (e) { console.warn("⚠️ DB paid keys error:", e); }
 
-        // 3. Env Keys
         const envFreeKeys = (process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "")
-            .split(/[,\n]+/)
-            .map(k => k.trim().replace(/^['"]|['"]$/g, ''))
-            .filter(k => k.length > 0 && !k.startsWith("#"));
-
+            .split(/[,\n]+/).map(k => k.trim().replace(/^['"]|['"]$/g, '')).filter(k => k && !k.startsWith("#"));
         const envPaidKeys = (process.env.GEMINI_PAID_KEYS || "")
-            .split(/[,\n]+/)
-            .map(k => k.trim().replace(/^['"]|['"]$/g, ''))
-            .filter(k => k.length > 0);
+            .split(/[,\n]+/).map(k => k.trim().replace(/^['"]|['"]$/g, '')).filter(k => k);
 
-        // 4. Merge ALL unique keys into one generic pool (All have standard 40/day limit now)
         const allKeys = Array.from(new Set([...dbFreeKeys, ...envFreeKeys, ...dbPaidKeys, ...envPaidKeys]));
-
         const now = Date.now();
         const lastReset = this.getLastResetTime(now);
 
+        // Create one slot per (apiKey × model) combination
         allKeys.forEach(k => {
-            if (!this.keys.has(k)) {
-                this.keys.set(k, {
-                    key: k,
-                    cooldownUntil: 0,
-                    totalRequestsToday: 0,
-                    lastDailyReset: lastReset,
-                    isDead: false,
-                    failedAttempts: 0
-                });
-            }
+            GEMINI_MODELS.forEach(model => {
+                const slotId = `${k}::${model}`;
+                if (!this.slots.has(slotId)) {
+                    this.slots.set(slotId, { key: k, model, requestsToday: 0, lastDailyReset: lastReset, cooldownUntil: 0, isDead: false, failedAttempts: 0 });
+                }
+            });
         });
 
-        // Re-build keyList for Round Robin
-        this.keyList = Array.from(this.keys.keys());
-
-        console.log(`🔐 KeyManager Initialized with ${this.keys.size} keys.`);
-        console.log(`💎 Limit Rule: Strict ${this.RATE_LIMIT_RPD} requests/day for all keys. Resets at 15:00 UTC+7.`);
+        this.slotList = Array.from(this.slots.keys());
+        console.log(`🔐 KeyManager: ${allKeys.length} keys × ${GEMINI_MODELS.length} models = ${this.slots.size} slots. Limit: ${MODEL_RPD_LIMIT}/slot/day (${TOTAL_RPD_PER_KEY}/key/day). Reset at 15:00 UTC+7.`);
         this.initialized = true;
     }
 
     /**
-     * Get the best available key using Round Robin
+     * Round-robin through all key+model slots to find an available one
      */
-    async getAvailableKey(): Promise<string> {
+    async getAvailableKeyAndModel(): Promise<{ key: string; model: string }> {
         await this.initialize();
-        if (this.keys.size === 0) {
-            throw new Error("No GEMINI_API_KEYS configured.");
-        }
+        if (this.slots.size === 0) throw new Error("No GEMINI_API_KEYS configured.");
 
-        // --- ROUND ROBIN SELECTION ---
-        const totalKeys = this.keyList.length;
+        const total = this.slotList.length;
         let minWaitTime = Infinity;
 
-        // Try to find a key starting from the NEXT index after the last used one.
-        for (let i = 0; i < totalKeys; i++) {
-            const targetIndex = (this.lastUsedIndex + 1 + i) % totalKeys;
-            const keyStr = this.keyList[targetIndex];
-            const usage = this.keys.get(keyStr);
-
-            if (!usage || usage.isDead) continue;
+        for (let i = 0; i < total; i++) {
+            const idx = (this.lastUsedIndex + 1 + i) % total;
+            const slotId = this.slotList[idx];
+            const slot = this.slots.get(slotId);
+            if (!slot || slot.isDead) continue;
 
             const now = Date.now();
+            if (slot.cooldownUntil > now) { minWaitTime = Math.min(minWaitTime, slot.cooldownUntil - now); continue; }
 
-            // Check Cooldown
-            if (usage.cooldownUntil > now) {
-                minWaitTime = Math.min(minWaitTime, usage.cooldownUntil - now);
-                continue;
-            }
+            // Auto-reset after 15:00
+            const periodReset = this.getLastResetTime(now);
+            if (slot.lastDailyReset < periodReset) { slot.requestsToday = 0; slot.lastDailyReset = periodReset; }
 
-            // Check Daily Limit (Reset exactly at 15:00 UTC+7)
-            const currentPeriodReset = this.getLastResetTime(now);
-            if (usage.lastDailyReset < currentPeriodReset) {
-                usage.totalRequestsToday = 0;
-                usage.lastDailyReset = currentPeriodReset;
-            }
-
-            if (usage.totalRequestsToday >= this.RATE_LIMIT_RPD) {
-                // STRICT DAILY RESET: Sleep until next 15:00 limit
+            if (slot.requestsToday >= MODEL_RPD_LIMIT) {
                 const nextReset = this.getNextResetTime(now);
-                const cooldown = nextReset - now;
-                const safeCooldown = cooldown > 0 ? cooldown : 60000;
-
-                console.warn(`⏳ Key ...${keyStr.slice(-5)} Hit Daily Limit (${usage.totalRequestsToday}/${this.RATE_LIMIT_RPD}). Resets at 15:00: ${(safeCooldown / 1000 / 3600).toFixed(1)}h left.`);
-                usage.cooldownUntil = now + safeCooldown;
-
-                minWaitTime = Math.min(minWaitTime, safeCooldown);
+                const wait = Math.max(nextReset - now, 60000);
+                slot.cooldownUntil = now + wait;
+                console.warn(`⏳ [${slot.model} | ...${slot.key.slice(-5)}] exhausted ${slot.requestsToday}/${MODEL_RPD_LIMIT}. Cooling ${(wait / 3600000).toFixed(1)}h until 15:00.`);
+                minWaitTime = Math.min(minWaitTime, wait);
                 continue;
             }
 
-            // FOUND VALID KEY!
-            this.lastUsedIndex = targetIndex;
-
-            // Record Usage
-            usage.totalRequestsToday++;
-
-            return keyStr;
+            // FOUND!
+            this.lastUsedIndex = idx;
+            slot.requestsToday++;
+            console.log(`🔑 Slot: ${slot.model} | ...${slot.key.slice(-5)} | ${slot.requestsToday}/${MODEL_RPD_LIMIT}`);
+            return { key: slot.key, model: slot.model };
         }
 
-        // If loop finishes without returning, no key is available.
-        if (minWaitTime === Infinity) {
-            console.warn("⚠️ All API Keys seem dead or exhausted daily limit.");
-            minWaitTime = 60000;
-        }
-
+        if (minWaitTime === Infinity) minWaitTime = 60000;
         if (minWaitTime < 100) minWaitTime = 1000;
+        const coolingCount = Array.from(this.slots.values()).filter(s => s.cooldownUntil > Date.now()).length;
+        console.log(`⏳ All ${this.slots.size} slots busy (cooling: ${coolingCount}).`);
 
-        const coolingCount = Array.from(this.keys.values()).filter(k => k.cooldownUntil > Date.now()).length;
-        console.log(`⏳ All ${this.keys.size} keys unavailable. Waiting ${(minWaitTime / 1000).toFixed(1)}s... (Cooling: ${coolingCount})`);
-
-        // Let's cap wait time to max 5 seconds if we're in an interactive loop just to avoid app deadlocks
-        // but throw an error instead so process goes to catch.
         if (minWaitTime > 10000) {
-            throw new Error(`All keys exhausted. Wait time: ${(minWaitTime / 1000 / 3600).toFixed(1)}h. Stopping to avoid deadlock.`);
+            throw new Error(`All slots exhausted. Resumes in ~${(minWaitTime / 3600000).toFixed(1)}h at 15:00.`);
         }
-
         await new Promise(r => setTimeout(r, minWaitTime + 100));
-
-        // Recursively try again after wait
-        return this.getAvailableKey();
+        return this.getAvailableKeyAndModel();
     }
 
-    /**
-     * Report usage result to optimize state
-     */
-    public reportResult(key: string, success: boolean, statusCode?: number, forcedRetryMs?: number, isQuotaExhausted?: boolean) {
-        const usage = this.keys.get(key);
-        if (!usage) return;
+    public reportResult(key: string, model: string, success: boolean, statusCode?: number, isQuotaExhausted?: boolean) {
+        const slot = this.slots.get(`${key}::${model}`);
+        if (!slot) return;
 
-        if (success) {
-            usage.failedAttempts = 0; // Reset on success
-            return;
-        }
-
-        usage.failedAttempts = (usage.failedAttempts || 0) + 1;
+        if (success) { slot.failedAttempts = 0; return; }
+        slot.failedAttempts++;
 
         if (isQuotaExhausted) {
-            const now = Date.now();
-            const nextReset = this.getNextResetTime(now);
-            const msUntilTomorrow = nextReset - now;
-
-            console.warn(`🛑 Key ...${key.slice(-5)} EXHAUSTED DAILY QUOTA EARLY (Status 429). Muting for ${(msUntilTomorrow / 1000 / 3600).toFixed(1)}h (until 15:00).`);
-            usage.cooldownUntil = nextReset;
-            // Force total to 40 so it stays capped
-            usage.totalRequestsToday = this.RATE_LIMIT_RPD;
-            return;
-        }
-
-        if (forcedRetryMs && forcedRetryMs > 0) {
-            console.warn(`⏳ Key ...${key.slice(-5)} Explicit Retry-After: ${(forcedRetryMs / 1000).toFixed(2)}s from Google.`);
-            usage.cooldownUntil = Date.now() + forcedRetryMs + 1000; // Add 1s safety buffer
+            const nextReset = this.getNextResetTime(Date.now());
+            console.warn(`🛑 [${model} | ...${key.slice(-5)}] Quota exceeded. Cooling until 15:00.`);
+            slot.cooldownUntil = nextReset;
+            slot.requestsToday = MODEL_RPD_LIMIT;
             return;
         }
 
         if (statusCode === 429) {
-            // Cool down for a long time on general 429 to avoid complete ban
-            const backoffMsValues = [15000, 60000, 300000, 900000];
-            const index = Math.min(usage.failedAttempts - 1, 3);
-            const backoffMs = backoffMsValues[index];
-
-            console.warn(`⚠️ Key ...${key.slice(-5)} hit Rate Limit (429). Fail #${usage.failedAttempts}. Cooling for ${backoffMs / 1000}s.`);
-            usage.cooldownUntil = Date.now() + backoffMs;
-        }
-        else if (statusCode === 400 || statusCode === 403 || statusCode === 500 || statusCode === 404) {
-            // 400 could mean invalid prompt, 403 invalid key
-            if (statusCode === 403 || statusCode === 400) {
-                console.warn(`💀 Key ...${key.slice(-5)} Error ${statusCode} (Dead Key). Marking Dead.`);
-                usage.isDead = true;
-            } else {
-                console.warn(`⚠️ Key ...${key.slice(-5)} Error ${statusCode}. Cooling for 5m.`);
-                usage.cooldownUntil = Date.now() + 5 * 60 * 1000;
-            }
+            const backoff = [15000, 60000, 300000, 900000][Math.min(slot.failedAttempts - 1, 3)];
+            console.warn(`⚠️ [${model} | ...${key.slice(-5)}] 429. Cooling ${backoff / 1000}s.`);
+            slot.cooldownUntil = Date.now() + backoff;
+        } else if (statusCode === 403) {
+            // Entire key is invalid – kill all model slots for this key
+            GEMINI_MODELS.forEach(m => { const s = this.slots.get(`${key}::${m}`); if (s) s.isDead = true; });
+            console.warn(`💀 Key ...${key.slice(-5)} is dead (403). All slots marked.`);
+        } else if (statusCode === 400 || statusCode === 500 || statusCode === 404) {
+            console.warn(`⚠️ [${model} | ...${key.slice(-5)}] Error ${statusCode}. Cooling 5m.`);
+            slot.cooldownUntil = Date.now() + 5 * 60 * 1000;
         }
     }
 
     getStats() {
         const now = Date.now();
-        // Sort by index in keyList to show rotation order
-        return this.keyList.map(k => {
-            const usage = this.keys.get(k)!;
+        const stats: { key: string; today: string; status: string }[] = [];
 
-            // Revalidate period before showing stats
-            const currentPeriodReset = this.getLastResetTime(now);
-            if (usage.lastDailyReset < currentPeriodReset) {
-                usage.totalRequestsToday = 0;
-            }
-
-            return {
-                key: usage.key.slice(0, 5) + "...",
-                today: `${usage.totalRequestsToday}/${this.RATE_LIMIT_RPD}`,
-                status: usage.isDead ? "DEAD 💀" : (usage.cooldownUntil > now ? `COOLING (${Math.ceil((usage.cooldownUntil - now) / 1000)}s)` : "READY")
-            };
+        // Group slots by API key
+        const keyMap = new Map<string, SlotUsage[]>();
+        this.slotList.forEach(slotId => {
+            const slot = this.slots.get(slotId)!;
+            if (!keyMap.has(slot.key)) keyMap.set(slot.key, []);
+            keyMap.get(slot.key)!.push(slot);
         });
+
+        keyMap.forEach((modelSlots, apiKey) => {
+            const periodReset = this.getLastResetTime(now);
+            const totalUsed = modelSlots.reduce((sum, s) => sum + (s.lastDailyReset < periodReset ? 0 : s.requestsToday), 0);
+            const anyDead = modelSlots.some(s => s.isDead);
+            const allReady = modelSlots.every(s => !s.isDead && s.cooldownUntil <= now);
+            const summaryStatus = anyDead ? "DEAD 💀" : allReady ? "READY" : (modelSlots.find(s => s.cooldownUntil > now)?.cooldownUntil
+                ? `COOLING (${Math.ceil(((modelSlots.find(s => s.cooldownUntil > now)?.cooldownUntil ?? now) - now) / 1000)}s)` : "READY");
+
+            stats.push({ key: `${apiKey.slice(0, 5)}...${apiKey.slice(-4)}`, today: `${totalUsed}/${TOTAL_RPD_PER_KEY}`, status: summaryStatus });
+
+            modelSlots.forEach(s => {
+                const used = s.lastDailyReset < periodReset ? 0 : s.requestsToday;
+                const status = s.isDead ? "DEAD 💀" : s.cooldownUntil > now ? `COOLING (${Math.ceil((s.cooldownUntil - now) / 1000)}s)` : "READY";
+                stats.push({ key: `  ↳ ${s.model}`, today: `${used}/${MODEL_RPD_LIMIT}`, status });
+            });
+        });
+
+        return stats;
     }
 
     public reset() {
         this.initialized = false;
-        this.keys.clear();
-        console.log("♻️ KeyManager reset via Admin Settings. Will reload keys on next request.");
+        this.slots.clear();
+        this.slotList = [];
+        console.log("♻️ KeyManager reset. Will reload on next request.");
     }
 }
 
@@ -303,17 +224,20 @@ export const generateText = async (prompt: string): Promise<string> => {
     while (attempts < MAX_ATTEMPTS) {
         attempts++;
         let key = "";
+        let model = "";
         try {
-            key = await keyManager.getAvailableKey();
+            const slot = await keyManager.getAvailableKeyAndModel();
+            key = slot.key;
+            model = slot.model;
             const keySuffix = key.slice(-5);
 
-            console.log(`🔑 Using Key: ...${keySuffix} (Attempt ${attempts} / ${MAX_ATTEMPTS})`);
-            emitLog(`🔑 Attempt ${attempts}/${MAX_ATTEMPTS}: Using Key ...${keySuffix}`);
+            console.log(`🔑 Using Key/Model: ...${keySuffix} / ${model}  (Attempt ${attempts} / ${MAX_ATTEMPTS})`);
+            emitLog(`🔑 Attempt ${attempts}/${MAX_ATTEMPTS}: Using Key ...${keySuffix} / ${model}`);
 
             const ai = new GoogleGenAI({ apiKey: key });
 
-            // Force Model 3.0 or 2.5 Flash as requested by guide
-            const modelName = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
+            // Allow environment override, otherwise use the slot's specific model
+            const modelName = process.env.GEMINI_MODEL || model;
 
             console.log("----------------------------------------------------------------");
             console.log("🚀 [AI DEBUG] Sending Prompt to", modelName);
@@ -345,8 +269,8 @@ export const generateText = async (prompt: string): Promise<string> => {
             console.log("----------------------------------------------------------------");
 
             // success
-            emitLog(`✅ AI Success with Key ...${keySuffix}`);
-            keyManager.reportResult(key, true);
+            emitLog(`✅ AI Success with Key ...${keySuffix} / ${model}`);
+            keyManager.reportResult(key, model, true);
             return cleanedText;
 
         } catch (error: any) {
@@ -357,13 +281,12 @@ export const generateText = async (prompt: string): Promise<string> => {
             if (error.status === 403) code = 403;
             if (error.status === 400) code = 400;
 
-            emitLog(`❌ Error with Key ...${key ? key.slice(-5) : 'unknown'}: ${code} (Attempt ${attempts})`, 'error');
+            emitLog(`❌ Error with Key ...${key ? key.slice(-5) : 'unknown'} / ${model || 'unknown'}: ${code} (Attempt ${attempts})`, 'error');
 
-            let retryMs = 0;
             const isQuotaExhausted = error.message?.includes("Quota exceeded") ||
                 JSON.stringify(error).includes("quotaMetric") || error.message?.includes("429");
 
-            if (key) keyManager.reportResult(key, false, code, retryMs, isQuotaExhausted);
+            if (key && model) keyManager.reportResult(key, model, false, code, isQuotaExhausted);
 
             // Wait a bit to prevent tight loop
             await new Promise(r => setTimeout(r, 1000));
