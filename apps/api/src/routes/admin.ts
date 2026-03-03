@@ -84,4 +84,32 @@ router.post("/missions", createMission);
 router.put("/missions/:id", updateMission);
 router.delete("/missions/:id", deleteMission);
 
+// DB Sync & Restore Routes (Admin HA Tools)
+import { syncNeonToNeon } from "../services/syncNeonToNeon";
+import { syncDatabaseToSheets } from "../services/googleSheetsSync";
+
+// POST /admin/sync-neon  body: { "from": "2", "to": "1" }
+router.post("/sync-neon", async (req, res) => {
+    const { from = "2", to = "1" } = req.body as { from?: "1" | "2", to?: "1" | "2" };
+    console.log(`[Admin] Triggering manual NEON ${from} → NEON ${to} sync...`);
+    try {
+        const result = await syncNeonToNeon(from, to);
+        res.json({ success: true, summary: result.summary });
+    } catch (err: any) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST /admin/force-sheets-sync  - forces a full dump from active NEON to Sheets
+router.post("/force-sheets-sync", async (_req, res) => {
+    console.log(`[Admin] Triggering Force Google Sheets Sync...`);
+    try {
+        await syncDatabaseToSheets();
+        res.json({ success: true, message: "Delta sync triggered. Check server logs for details." });
+    } catch (err: any) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 export default router;
+
