@@ -28,6 +28,8 @@ pool1.on('error', (err: any) => {
     if (isQuotaError && pool2 && !isFailingOver) {
         console.warn(`[HA Database] NEON 1 Pool emitted Quota Error! Auto-failing over to NEON 2...`);
         isFailingOver = true;
+        // CRITICAL: End the broken pool so it stops retrying and crashing the app in the background
+        pool1.end().catch(e => console.error('Error ending crashed pool1:', e));
     } else {
         console.error('[HA Database Pool 1] Unexpected background error:', err?.message || err);
     }
@@ -52,9 +54,10 @@ const originalQuery = currentPool.query.bind(currentPool);
         // Check if error is Neon rate limit / compute limit (often XX000 or 503)
         const isQuotaError = error?.code === 'XX000' || error?.message?.includes('endpoint is currently disabled') || error?.message?.includes('quota');
 
-        if (isQuotaError && pool2 && currentPool === pool1) {
-            console.warn(`[HA Database] NEON 1 failed with Quota Error! Auto-failing over to NEON 2...`);
+        if (isQuotaError && pool2 && currentPool === pool1 && !isFailingOver) {
+            console.warn(`[HA Database] NEON 1 query failed with Quota! Failing over...`);
             isFailingOver = true;
+            pool1.end().catch(() => { }); // end quietly
             return values ? await pool2.query(textOrConfig, values) : await pool2.query(textOrConfig);
         }
         throw error;
