@@ -111,5 +111,16 @@ router.post("/force-sheets-sync", async (_req, res) => {
     }
 });
 
+// Gemini AI Stats Route (for UI Quota Tracker)
+import { getRateLimitStats } from "../services/aiService";
+router.get("/gemini/stats", (_req, res) => {
+    try {
+        const stats = getRateLimitStats();
+        res.json({ success: true, stats });
+    } catch (err: any) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 export default router;
 

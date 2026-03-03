@@ -11,7 +11,7 @@
     "reset": "tsx src/reset.ts"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
+    "@google/genai": "^1.43.0",
     "@repo/db": "workspace:^",
     "@types/cheerio": "^1.0.0",
     "axios": "^1.13.4",

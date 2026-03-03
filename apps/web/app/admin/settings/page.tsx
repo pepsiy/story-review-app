@@ -9,17 +9,41 @@ import { toast } from "sonner";
 
 type SettingsData = Record<string, string>;
 
+type GeminiKeyStat = {
+    key: string;
+    today: string;
+    status: string;
+};
+
 export default function AdminSettingsPage() {
     const [activeTab, setActiveTab] = useState<'gemini' | 'telegram' | 'crawl'>('gemini');
     const [settings, setSettings] = useState<SettingsData>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
+    const [geminiStats, setGeminiStats] = useState<GeminiKeyStat[]>([]);
+    const [loadingStats, setLoadingStats] = useState(false);
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
     useEffect(() => {
         fetchSettings();
+        fetchGeminiStats();
     }, []);
+
+    const fetchGeminiStats = async () => {
+        setLoadingStats(true);
+        try {
+            const res = await fetch(`${API_URL}/admin/gemini/stats`);
+            if (res.ok) {
+                const data = await res.json();
+                setGeminiStats(data.stats || []);
+            }
+        } catch (e) {
+            console.error("Could not load Gemini quota stats", e);
+        } finally {
+            setLoadingStats(false);
+        }
+    };
 
     const fetchSettings = async () => {
         try {
@@ -139,9 +163,9 @@ export default function AdminSettingsPage() {
                 {activeTab === 'gemini' && (
                     <>
                         <div>
-                            <Label htmlFor="geminiKey" className="text-base">Gemini API Key (Google AI)</Label>
+                            <Label htmlFor="geminiKey" className="text-base">🔑 Gemini API Keys (Free hoặc Paid)</Label>
                             <p className="text-sm text-gray-500 mb-2">
-                                Nhập nhiều key cách nhau bởi dấu phẩy (key1, key2) để tự động xoay vòng khi hết quota.
+                                Nhập nhiều key cách nhau bởi dấu phẩy. Mỗi key có giới hạn <strong>40 requests/ngày</strong>, reset lúc 15:00 mỗi ngày.
                             </p>
                             <Input
                                 id="geminiKey"
@@ -153,17 +177,85 @@ export default function AdminSettingsPage() {
                         </div>
 
                         <div>
-                            <Label htmlFor="geminiPaidKey" className="text-base text-amber-700">Gemini Paid Keys (Tier 1+)</Label>
+                            <Label htmlFor="geminiPaidKey" className="text-base">🔑 Gemini Extra Keys (Thêm vào pool chung)</Label>
                             <p className="text-sm text-gray-500 mb-2">
-                                Keys trả phí (1000 RPM, 1.5M TPM). Được ưu tiên sử dụng và có hạn mức cao hơn.
+                                Keys bổ sung, cùng được gộp vào pool với giới hạn <strong>40 requests/ngày mỗi key</strong>.
                             </p>
                             <Input
                                 id="geminiPaidKey"
                                 value={settings.GEMINI_PAID_KEYS || ''}
                                 onChange={(e) => updateSetting('GEMINI_PAID_KEYS', e.target.value)}
-                                placeholder="AIzaSy... (Paid Key)"
+                                placeholder="AIzaSy... (Extra Key)"
                                 className="font-mono text-sm border-amber-200 bg-amber-50"
                             />
+                        </div>
+
+                        {/* Quota Tracker */}
+                        <div className="mt-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <Label className="text-base text-indigo-700">📊 Quota Tracker (Lượt dùng hôm nay)</Label>
+                                <button
+                                    type="button"
+                                    onClick={fetchGeminiStats}
+                                    disabled={loadingStats}
+                                    className="text-xs px-3 py-1 rounded bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50"
+                                >
+                                    {loadingStats ? "Đang tải..." : "🔄 Refresh"}
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-400 mb-3">Reset tự động lúc <strong>15:00</strong> mỗi ngày. Giới hạn: <strong>40 requests/key/ngày</strong>.</p>
+                            {geminiStats.length === 0 ? (
+                                <p className="text-sm text-gray-400 italic">{loadingStats ? "Đang tải dữ liệu..." : "Không có key nào hoặc server chưa xử lý request AI nào."}</p>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm border-collapse">
+                                        <thead>
+                                            <tr className="bg-gray-50 text-gray-600">
+                                                <th className="text-left px-3 py-2 border">🔑 Key</th>
+                                                <th className="text-left px-3 py-2 border">📈 Hôm nay</th>
+                                                <th className="text-left px-3 py-2 border">🔋 Còn lại</th>
+                                                <th className="text-left px-3 py-2 border">⚡ Trạng thái</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {geminiStats.map((stat, idx) => {
+                                                const [used, total] = stat.today.split('/').map(Number);
+                                                const remaining = total - used;
+                                                const pct = Math.round((used / total) * 100);
+                                                const isReady = stat.status === 'READY';
+                                                const isDead = stat.status.includes('DEAD');
+                                                return (
+                                                    <tr key={idx} className={isDead ? 'bg-red-50' : isReady ? 'bg-green-50' : 'bg-yellow-50'}>
+                                                        <td className="px-3 py-2 border font-mono text-xs">{stat.key}</td>
+                                                        <td className="px-3 py-2 border">
+                                                            <div className="flex items-center gap-2">
+                                                                <span>{stat.today}</span>
+                                                                <div className="flex-1 bg-gray-200 rounded-full h-2 min-w-16">
+                                                                    <div
+                                                                        className={`h-2 rounded-full transition-all ${pct >= 80 ? 'bg-red-500' : pct >= 50 ? 'bg-yellow-500' : 'bg-green-500'}`}
+                                                                        style={{ width: `${Math.min(pct, 100)}%` }}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className={`px-3 py-2 border font-semibold ${remaining <= 5 ? 'text-red-600' : remaining <= 15 ? 'text-yellow-600' : 'text-green-600'}`}>
+                                                            {remaining} lượt
+                                                        </td>
+                                                        <td className="px-3 py-2 border">
+                                                            <span className={`px-2 py-1 rounded text-xs font-medium ${isDead ? 'bg-red-100 text-red-700' :
+                                                                    isReady ? 'bg-green-100 text-green-700' :
+                                                                        'bg-yellow-100 text-yellow-700'
+                                                                }`}>
+                                                                {stat.status}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
                     </>
                 )}
