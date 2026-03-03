@@ -288,9 +288,9 @@ export const getGenres = async (req: Request, res: Response) => {
     try {
         const allGenres = await db.select().from(genres).orderBy(desc(genres.createdAt));
         res.json(allGenres);
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error fetching genres:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+        res.status(500).json({ error: "Internal Server Error", details: error?.message || String(error) });
     }
 };
 

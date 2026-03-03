@@ -39,27 +39,27 @@ if (pool2) {
     });
 }
 
-const proxyPool = {
-    ...currentPool,
-    query: async (textOrConfig: any, values?: any[]) => {
-        try {
-            if (isFailingOver && pool2) {
-                return values ? await pool2.query(textOrConfig, values) : await pool2.query(textOrConfig);
-            }
-            return values ? await currentPool.query(textOrConfig, values) : await currentPool.query(textOrConfig);
-        } catch (error: any) {
-            // Check if error is Neon rate limit / compute limit (often XX000 or 503)
-            const isQuotaError = error?.code === 'XX000' || error?.message?.includes('endpoint is currently disabled') || error?.message?.includes('quota');
+// Override query to add HA Failover directly on the instance (to preserve prototype chain)
+const originalQuery = currentPool.query.bind(currentPool);
 
-            if (isQuotaError && pool2 && currentPool === pool1) {
-                console.warn(`[HA Database] NEON 1 failed with Quota Error! Auto-failing over to NEON 2...`);
-                isFailingOver = true;
-                return values ? await pool2.query(textOrConfig, values) : await pool2.query(textOrConfig);
-            }
-            throw error;
+(currentPool as any).query = async (textOrConfig: any, values?: any[]) => {
+    try {
+        if (isFailingOver && pool2) {
+            return values ? await pool2.query(textOrConfig, values) : await pool2.query(textOrConfig);
         }
-    }
-} as any;
+        return values ? await originalQuery(textOrConfig, values) : await originalQuery(textOrConfig);
+    } catch (error: any) {
+        // Check if error is Neon rate limit / compute limit (often XX000 or 503)
+        const isQuotaError = error?.code === 'XX000' || error?.message?.includes('endpoint is currently disabled') || error?.message?.includes('quota');
 
-export const db = drizzle(proxyPool, { schema });
+        if (isQuotaError && pool2 && currentPool === pool1) {
+            console.warn(`[HA Database] NEON 1 failed with Quota Error! Auto-failing over to NEON 2...`);
+            isFailingOver = true;
+            return values ? await pool2.query(textOrConfig, values) : await pool2.query(textOrConfig);
+        }
+        throw error;
+    }
+};
+
+export const db = drizzle(currentPool, { schema });
 export * from './schema';
