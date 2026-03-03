@@ -122,8 +122,9 @@ export async function syncNeonToNeon(from: "1" | "2", to: "1" | "2"): Promise<{ 
                             // Detect PK column (id, sessionToken, or identifier+token composite)
                             let conflictTarget = "id";
                             if (tableName === "session") conflictTarget = "sessionToken";
-                            if (tableName === "verificationToken") conflictTarget = `"identifier", "token"`;
                             if (tableName === "account") conflictTarget = `"provider", "providerAccountId"`;
+                            if (tableName === "verificationToken") conflictTarget = `"identifier", "token"`;
+                            if (tableName === "system_settings") conflictTarget = "key";
 
                             const query = conflictSet
                                 ? `INSERT INTO "${tableName}" (${colString}) VALUES (${valPlaceholders})

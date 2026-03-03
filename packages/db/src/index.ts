@@ -41,12 +41,12 @@ if (pool2) {
 
 const proxyPool = {
     ...currentPool,
-    query: async (text: string, values?: any[]) => {
+    query: async (textOrConfig: any, values?: any[]) => {
         try {
             if (isFailingOver && pool2) {
-                return await pool2.query(text, values);
+                return values ? await pool2.query(textOrConfig, values) : await pool2.query(textOrConfig);
             }
-            return await currentPool.query(text, values);
+            return values ? await currentPool.query(textOrConfig, values) : await currentPool.query(textOrConfig);
         } catch (error: any) {
             // Check if error is Neon rate limit / compute limit (often XX000 or 503)
             const isQuotaError = error?.code === 'XX000' || error?.message?.includes('endpoint is currently disabled') || error?.message?.includes('quota');
@@ -54,7 +54,7 @@ const proxyPool = {
             if (isQuotaError && pool2 && currentPool === pool1) {
                 console.warn(`[HA Database] NEON 1 failed with Quota Error! Auto-failing over to NEON 2...`);
                 isFailingOver = true;
-                return await pool2.query(text, values);
+                return values ? await pool2.query(textOrConfig, values) : await pool2.query(textOrConfig);
             }
             throw error;
         }
