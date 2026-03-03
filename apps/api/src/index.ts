@@ -73,6 +73,7 @@ app.get("/health", (req, res) => {
 import { telegramService } from "./services/telegramService";
 import { startCrawlCron } from "./services/crawlCron";
 import { startGoogleSheetsWorker } from "./services/googleSheetsSync";
+import { startMonthlyNeonRestore } from "./services/monthlyNeonRestore";
 
 async function initializeServices() {
   console.log("🔧 Initializing services...");
@@ -85,6 +86,9 @@ async function initializeServices() {
 
   // Start Background Sync Worker for Google Sheets HA Fallback
   startGoogleSheetsWorker();
+
+  // Start Monthly NEON Auto-Restore (runs 00:05 on the 1st of every month)
+  startMonthlyNeonRestore();
 
   console.log("✅ All services initialized");
 }
