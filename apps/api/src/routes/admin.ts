@@ -104,8 +104,10 @@ router.post("/sync-neon", async (req, res) => {
 router.post("/force-sheets-sync", async (_req, res) => {
     console.log(`[Admin] Triggering Force Google Sheets Sync...`);
     try {
-        await syncDatabaseToSheets();
-        res.json({ success: true, message: "Delta sync triggered. Check server logs for details." });
+        syncDatabaseToSheets().catch(err => {
+            console.error("❌ Background Sync failed:", err);
+        });
+        res.json({ success: true, message: "Delta sync triggered in background. Check server logs for details." });
     } catch (err: any) {
         res.status(500).json({ success: false, error: err.message });
     }
