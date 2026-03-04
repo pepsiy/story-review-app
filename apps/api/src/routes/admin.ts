@@ -111,6 +111,22 @@ router.post("/force-sheets-sync", async (_req, res) => {
     }
 });
 
+import { restoreFromSheets } from "../services/restoreFromSheets";
+
+// POST /admin/force-sheets-restore - runs Google Sheets restore to active DB
+router.post("/force-sheets-restore", async (_req, res) => {
+    console.log(`[Admin] Triggering Force Google Sheets Restore to Database...`);
+    try {
+        // Run asynchronously to prevent Render 60s timeout on large datasets
+        restoreFromSheets().catch(err => {
+            console.error("❌ Background Restore failed:", err);
+        });
+        res.json({ success: true, message: "Restore process started in the background. Please monitor Render logs!" });
+    } catch (err: any) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Gemini AI Stats Route (for UI Quota Tracker)
 import { getRateLimitStats } from "../services/aiService";
 router.get("/gemini/stats", (_req, res) => {
