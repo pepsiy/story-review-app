@@ -617,7 +617,11 @@ export const repairJob = async (req: Request, res: Response) => {
             where: and(
                 eq(crawlChapters.jobId, id),
                 eq(crawlChapters.status, 'completed')
-            )
+            ),
+            columns: {
+                id: true,
+                chapterNumber: true
+            }
         });
 
         let resetCount = 0;
@@ -703,7 +707,14 @@ export const getCrawlStatus = async (req: Request, res: Response) => {
             where: and(
                 eq(crawlChapters.jobId, parseInt(jobId)),
                 eq(crawlChapters.status, 'failed')
-            )
+            ),
+            columns: {
+                id: true,
+                chapterNumber: true,
+                title: true,
+                error: true,
+                retryCount: true
+            }
         });
 
         res.json({
@@ -823,6 +834,13 @@ export const getLatestJobForWork = async (req: Request, res: Response) => {
                 eq(crawlChapters.jobId, job.id),
                 eq(crawlChapters.status, 'failed')
             ),
+            columns: {
+                id: true,
+                chapterNumber: true,
+                title: true,
+                error: true,
+                retryCount: true
+            },
             limit: 50 // Limit to avoid huge payload
         });
 

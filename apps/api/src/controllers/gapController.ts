@@ -28,7 +28,8 @@ export const scanAndFixGaps = async (req: Request, res: Response) => {
             where: and(
                 eq(crawlChapters.jobId, job.id),
                 eq(crawlChapters.status, 'failed')
-            )
+            ),
+            columns: { id: true }
         });
 
         // 3. Find "stuck" chapters (summarizing/crawling for too long > 10 mins)
@@ -38,7 +39,8 @@ export const scanAndFixGaps = async (req: Request, res: Response) => {
                 eq(crawlChapters.jobId, job.id),
                 sql`(${crawlChapters.status} = 'crawling' OR ${crawlChapters.status} = 'summarizing')`,
                 sql`${crawlChapters.createdAt} < ${tenMinsAgo}` // approximate check
-            )
+            ),
+            columns: { id: true }
         });
 
         // 4. Find completely missing chapters (User deleted from UI, but marked as completed here)
@@ -46,7 +48,8 @@ export const scanAndFixGaps = async (req: Request, res: Response) => {
             where: and(
                 eq(crawlChapters.jobId, job.id),
                 eq(crawlChapters.status, 'completed')
-            )
+            ),
+            columns: { id: true, chapterNumber: true }
         });
 
         // Get all public chapters for this work
