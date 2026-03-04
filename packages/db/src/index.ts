@@ -1,6 +1,10 @@
 import { Pool } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import * as schema from './schema';
+import { EventEmitter } from 'events';
+
+// Event bus so other modules can react to DB pool rotations without circular deps
+export const dbEvents = new EventEmitter();
 
 const activeNeon = process.env.ACTIVE_NEON || '1';
 const url1 = process.env.NEON_DATABASE_URL_1 || process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
@@ -55,8 +59,12 @@ const currentPool = new Proxy(activePools[activeIndex].pool, {
                         return await method(...args);
                     } catch (err: any) {
                         if (checkQuotaError(err)) {
-                            console.error(`🔴 [DB-HA] Pool ${current.id} QUOTA EXCEEDED! Rotating to next...`);
+                            const fromId = current.id;
+                            console.error(`\uD83D\uDD34 [DB-HA] Pool ${current.id} QUOTA EXCEEDED! Rotating to next...`);
                             activeIndex = (activeIndex + 1) % activePools.length;
+                            const toId = activePools[activeIndex].id;
+                            console.warn(`[DB-HA] Emitting pool-rotated event: NEON ${fromId} \u2192 NEON ${toId}`);
+                            dbEvents.emit('pool-rotated', { fromPool: fromId, toPool: toId });
                             attempts++;
                         } else {
                             throw err; // Standard Database Syntax or Constraint Error

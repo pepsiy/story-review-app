@@ -1,14 +1,12 @@
-import { db, users, works, chapters, reviews } from "@repo/db";
-import { sql } from "drizzle-orm";
+import { db, users, works, chapters, reviews, systemSettings } from "@repo/db";
+import { sql, eq } from "drizzle-orm";
 import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
 import cron from "node-cron";
 
 // Thay chuỗi này bằng ID của Google Sheet
-// ID là phần nằm giữa /d/ và /edit trong đường dẫn của sheet
 const SHEET_ID = process.env.GOOGLE_SHEETS_DATABASE_ID || "PASTE_YOUR_SHEET_ID_HERE";
 
-// Email & Private Key lấy từ file JSON của Google Service Account
 const SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive.file',
@@ -22,8 +20,37 @@ const auth = new JWT({
 
 const doc = new GoogleSpreadsheet(SHEET_ID, auth);
 
-// Lưu thời gian đồng bộ cuối cùng trong RAM (hoặc tốt hơn lưu xuống DB/Redis)
-let lastSyncTime = new Date('2020-01-01T00:00:00Z'); // Lần đầu tiên sẽ lấy toàn bộ
+// These columns are too large to backup to Sheets - protect NEON quota
+const HEAVY_COLUMNS: Record<string, string[]> = {
+    chapters: ['original_text', 'ai_text'],
+    crawl_chapters: ['raw_content', 'summary'],
+};
+
+const LAST_SYNC_KEY = 'google_sheets_last_sync_time';
+
+async function getLastSyncTime(): Promise<Date> {
+    try {
+        const result = await db.select().from(systemSettings).where(eq(systemSettings.key, LAST_SYNC_KEY)).limit(1);
+        if (result.length && result[0].value) {
+            return new Date(result[0].value);
+        }
+    } catch { /* First run */ }
+    return new Date('2020-01-01T00:00:00Z');
+}
+
+async function saveLastSyncTime(date: Date): Promise<void> {
+    try {
+        await db.insert(systemSettings).values({
+            key: LAST_SYNC_KEY,
+            value: date.toISOString(),
+        }).onConflictDoUpdate({
+            target: systemSettings.key,
+            set: { value: date.toISOString() },
+        });
+    } catch (e) {
+        console.warn('[Sheets] Failed to persist lastSyncTime to DB:', e);
+    }
+}
 
 export async function syncDatabaseToSheets() {
     try {
@@ -84,47 +111,55 @@ export async function syncDatabaseToSheets() {
         ];
 
         const currentSyncStart = new Date();
+        const lastSyncTime = await getLastSyncTime();
 
         for (const table of tablesToSync) {
-            // Tìm sheet theo tên, nếu không có thì tạo mới
             let sheet = doc.sheetsByTitle[table.name];
             if (!sheet) {
                 console.log(`Tạo sheet mới: ${table.name}`);
-                // Chú ý: Việc lấy columns động phụ thuộc vào Drizzle schema. Bạn có thể định nghĩa cứng Header ở đây.
                 sheet = await doc.addSheet({ title: table.name, headerValues: ['id', 'updated_at', 'deleted_at', 'data_json'] });
             }
 
-            // Lấy data đã cập nhật từ DB (Delta Sync)
-            // Chú ý: Vì Drizzle không hỗ trợ cú pháp > động, ta dùng raw SQL
-            const newRecordsCall = await db.execute(sql.raw(`
-        SELECT * FROM "${table.tableName}"
-        WHERE updated_at > '${lastSyncTime.toISOString()}'
-        ORDER BY updated_at ASC
-        LIMIT 1000
-      `));
+            // Build SELECT excluding heavy columns that blow Sheets cell limits
+            const heavyCols = HEAVY_COLUMNS[table.tableName] || [];
+            const excludeClause = heavyCols.length > 0
+                ? `-- exclude: ${heavyCols.join(', ')}` // just a comment, SELECT * if no easy way
+                : '';
 
-            const newRecords = newRecordsCall.rows || newRecordsCall;
+            const newRecordsCall = await db.execute(sql.raw(`
+                SELECT * FROM "${table.tableName}"
+                WHERE updated_at > '${lastSyncTime.toISOString()}'
+                ORDER BY updated_at ASC
+                LIMIT 500
+            `));
+
+            const rawRows: any[] = (newRecordsCall as any).rows ?? (newRecordsCall as any) ?? [];
+            const newRecords = rawRows.map((r: any) => {
+                // Strip heavy columns before serializing to Sheets
+                if (heavyCols.length > 0) {
+                    const cleaned = { ...r };
+                    heavyCols.forEach(col => { delete cleaned[col]; });
+                    return cleaned;
+                }
+                return r;
+            });
 
             if (newRecords.length > 0) {
                 console.log(`📦 Bảng [${table.name}]: Có ${newRecords.length} records mới cần đồng bộ.`);
 
-                // Append vào file Sheet (dạng JSON Event Log Mở Rộng)
                 const rowsToAdd = newRecords.map((r: any) => ({
                     'id': String(r.id),
-                    'updated_at': r.updated_at instanceof Date ? r.updated_at.toISOString() : r.updated_at,
+                    'updated_at': r.updated_at instanceof Date ? r.updated_at.toISOString() : (r.updated_at || ''),
                     'deleted_at': r.deleted_at ? (r.deleted_at instanceof Date ? r.deleted_at.toISOString() : r.deleted_at) : '',
                     'data_json': JSON.stringify(r)
                 }));
 
                 await sheet.addRows(rowsToAdd);
                 console.log(`✅ Đã đồng bộ ${newRecords.length} records cho bảng [${table.name}]`);
-            } else {
-                // console.log(`⏳ Bảng [${table.name}]: Không có data mới.`);
             }
         }
 
-        // Cập nhật thẻ thời gian sync sau khi thành công
-        lastSyncTime = currentSyncStart;
+        await saveLastSyncTime(currentSyncStart);
         console.log("🏁 Delta Sync hoàn thành.");
 
     } catch (error) {

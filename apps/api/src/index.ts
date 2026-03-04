@@ -74,6 +74,28 @@ import { telegramService } from "./services/telegramService";
 import { startCrawlCron } from "./services/crawlCron";
 import { startGoogleSheetsWorker } from "./services/googleSheetsSync";
 import { startMonthlyNeonRestore } from "./services/monthlyNeonRestore";
+import { restoreFromSheets } from "./services/restoreFromSheets";
+import { dbEvents } from "@repo/db";
+
+// When the HA Proxy switches to a new NEON pool, auto-restore data from Google Sheets
+// This ensures the fresh NEON is populated before serving traffic
+let isRestoring = false;
+dbEvents.on('pool-rotated', async ({ fromPool, toPool }: { fromPool: number, toPool: number }) => {
+  console.log(`🔄 [HA-Auto] Pool ${fromPool} → Pool ${toPool} detected. Triggering auto-restore from Sheets...`);
+  if (isRestoring) {
+    console.warn('[HA-Auto] Restore already in progress, skipping.');
+    return;
+  }
+  isRestoring = true;
+  try {
+    await restoreFromSheets();
+    console.log('✅ [HA-Auto] Auto-restore complete. New NEON is ready.');
+  } catch (e) {
+    console.error('❌ [HA-Auto] Auto-restore failed:', e);
+  } finally {
+    isRestoring = false;
+  }
+});
 
 async function initializeServices() {
   console.log("🔧 Initializing services...");
