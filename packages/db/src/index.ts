@@ -11,6 +11,11 @@ if (!url1 && !url2 && !url3) {
     console.warn("⚠️  NEON_DATABASE_URL is missing! Using dummy connection string for build.");
 }
 
+console.log(`[DB-HA] Booting Up... URLs present -> NEON 1: ${!!url1}, NEON 2: ${!!url2}, NEON 3: ${!!url3}`);
+if (!url3) {
+    console.warn("⚠️ [DB-HA] WARNING: NEON_DATABASE_URL_3 is NOT SET in the Environment Variables! Please add it on Render!");
+}
+
 const getCleanUrl = (url?: string) => {
     if (!url) return "postgresql://dummy:dummy@127.0.0.1/dummy?sslmode=require";
     return url.replace("&channel_binding=require", "");
@@ -20,67 +25,68 @@ const pool1 = url1 ? new Pool({ connectionString: getCleanUrl(url1) }) : null;
 const pool2 = url2 ? new Pool({ connectionString: getCleanUrl(url2) }) : null;
 const pool3 = url3 ? new Pool({ connectionString: getCleanUrl(url3) }) : null;
 
-const pools = [pool1, pool2, pool3].filter(p => p !== null) as Pool[];
-let activePoolIndex = 0;
-if (activeNeon === '3' && pool3) activePoolIndex = pools.indexOf(pool3);
-else if (activeNeon === '2' && pool2) activePoolIndex = pools.indexOf(pool2);
-else if (activeNeon === '2' && pool2) activePoolIndex = pools.indexOf(pool2);
+const activePools: { id: number, pool: Pool }[] = [];
+if (pool1) activePools.push({ id: 1, pool: pool1 });
+if (pool2) activePools.push({ id: 2, pool: pool2 });
+if (pool3) activePools.push({ id: 3, pool: pool3 });
+
+// Determine starting active index
+let activeIndex = 0;
+if (activeNeon === '3' && pool3) activeIndex = activePools.findIndex(p => p.id === 3);
+else if (activeNeon === '2' && pool2) activeIndex = activePools.findIndex(p => p.id === 2);
+
+// Standardize error reading for Neon Serverless ErrorEvents vs standard JS Errors
+const checkQuotaError = (err: any) => {
+    // If it's a DOMException/ErrorEvent, Neon wraps exactly like this in browser/Cloudflare runtimes.
+    const msg = String(err?.message || err?.error?.message || err).toLowerCase();
+    return err?.code === 'XX000' || msg.includes('quota') || msg.includes('exceed') || msg.includes('transfer') || msg.includes('endpoint');
+};
 
 // The HA Pool Wrapper Proxy
-const currentPool = new Proxy(pools[activePoolIndex], {
-    get(target, prop, receiver) {
+const currentPool = new Proxy(activePools[activeIndex].pool, {
+    get(target, prop) {
         if (prop === 'query' || prop === 'connect') {
             return async (...args: any[]) => {
                 let attempts = 0;
-                while (attempts < pools.length) {
-                    const pool = pools[activePoolIndex];
+                while (attempts < activePools.length) {
+                    const current = activePools[activeIndex];
                     try {
-                        const method = (pool as any)[prop].bind(pool);
+                        const method = (current.pool as any)[prop].bind(current.pool);
                         return await method(...args);
                     } catch (err: any) {
-                        const msg = err.message?.toLowerCase() || '';
-                        // Identify quota exhaustion or endpoint suspension
-                        if (msg.includes('quota') || msg.includes('exceed') || msg.includes('compute') || msg.includes('endpoint') || msg.includes('transfer')) {
-                            console.error(`🔴 [DB-HA] Pool ${activePoolIndex + 1} QUOTA EXCEEDED or DEAD. Rotating...`);
-                            activePoolIndex = (activePoolIndex + 1) % pools.length;
+                        if (checkQuotaError(err)) {
+                            console.error(`🔴 [DB-HA] Pool ${current.id} QUOTA EXCEEDED! Rotating to next...`);
+                            activeIndex = (activeIndex + 1) % activePools.length;
                             attempts++;
                         } else {
-                            throw err; // Real SQL logic error
+                            throw err; // Standard Database Syntax or Constraint Error
                         }
                     }
                 }
-                throw new Error("🔴 [DB-HA] FATAL: All DB pools exhausted their quotas!");
+                throw new Error(`🔴 [DB-HA] FATAL ALERT! All ${activePools.length} current Neon DB pools have exhausted their capacity limit!`);
             };
         }
 
-        const value = (pools[activePoolIndex] as any)[prop];
+        const value = (activePools[activeIndex].pool as any)[prop];
         if (typeof value === 'function') {
-            return value.bind(pools[activePoolIndex]);
+            return value.bind(activePools[activeIndex].pool);
         }
         return value;
     }
 });
 
-// Prevent unhandled errors from crashing the Node instance
-pools.forEach((pool, index) => {
-    pool.on('error', (err: any) => {
-        const msg = err?.message?.toLowerCase() || '';
-        const isQuotaError = err?.code === 'XX000' || msg.includes('endpoint') || msg.includes('quota') || msg.includes('exceed') || msg.includes('transfer');
-
-        if (isQuotaError) {
-            console.warn(`[HA Database] NEON ${index + 1} Pool emitted Quota Error in background!`);
-            // If it's the active pool, we switch
-            if (activePoolIndex === index) {
-                console.warn(`[HA Database] Auto-rotating from NEON ${index + 1} to next available pool...`);
-                activePoolIndex = (activePoolIndex + 1) % pools.length;
-            }
-            // Close broken pool to prevent memory leaks / constant retries
-            pool.end().catch(e => console.error(`Error ending crashed pool ${index + 1}:`, e));
-            pools.splice(index, 1); // Remove from active rotation array
+// Attach silent error listeners to prevent background crash loops
+activePools.forEach((item) => {
+    item.pool.on('error', (err: any) => {
+        if (checkQuotaError(err)) {
+            console.warn(`[HA Database] Pool ${item.id} emitted Quota Error Event in background.`);
         } else {
-            console.error(`[HA Database Pool ${index + 1}] Unexpected background error:`, err?.message || err);
+            // Log as string instead of object to unwrap tricky ErrorEvents
+            const msg = err?.message || err?.error?.message || "Unknown Error";
+            console.error(`[HA Database Pool ${item.id}] Background error:`, msg);
         }
     });
 });
+
 export const db = drizzle(currentPool, { schema });
 export * from './schema';
