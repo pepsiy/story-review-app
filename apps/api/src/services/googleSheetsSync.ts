@@ -20,10 +20,11 @@ const auth = new JWT({
 
 const doc = new GoogleSpreadsheet(SHEET_ID, auth);
 
-// These columns are too large to backup to Sheets - protect NEON quota
+// Only exclude truly HUGE raw columns that exceed Google Sheets 50k char cell limit.
+// ai_text (summaries ~2-5k chars) and summary are kept - they are the valuable data!
 const HEAVY_COLUMNS: Record<string, string[]> = {
-    chapters: ['original_text', 'ai_text'],
-    crawl_chapters: ['raw_content', 'summary'],
+    chapters: ['original_text'],        // raw full novel chapters can be 100k+ chars
+    crawl_chapters: ['raw_content'],    // raw crawled HTML/text, not needed in backup
 };
 
 const LAST_SYNC_KEY = 'google_sheets_last_sync_time';
