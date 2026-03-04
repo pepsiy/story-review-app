@@ -139,10 +139,10 @@ export function startGoogleSheetsWorker() {
         return;
     }
 
-    console.log("⏰ Kích hoạt Google Sheets Delta Sync Worker ngầm (Cron: 15p / lần).");
+    console.log("⏰ Kích hoạt Google Sheets Delta Sync Worker ngầm (Cron: 15p / lần). Vòng đầu tiên sẽ chạy sau 15p.");
 
-    // Chạy ngay 1 lần khi server vừa boot
-    syncDatabaseToSheets();
+    // Xóa gọi ngay lúc boot: Tránh Render Healthcheck bị Timeout 60s
+    // syncDatabaseToSheets();
 
     // Định kỳ mỗi 15 phút
     cron.schedule("*/15 * * * *", () => {
