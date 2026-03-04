@@ -115,6 +115,26 @@ async function main() {
     }
     console.log("✅ Seeded Beasts");
 
+    // 6. Seed Admin Users
+    const { users } = await import("@repo/db");
+    const emails = ["admin@tomtat.com.vn", "tomtat.com.vn@gmail.com", "admin@tomtat.com"];
+    for (const email of emails) {
+        try {
+            await db.insert(users).values({
+                email: email,
+                name: "System Admin",
+                role: "admin",
+                gold: 99999,
+                cultivationLevel: "Tiên Nhân",
+                cultivationExp: 9999,
+                bio: "System Administrator"
+            });
+            console.log(`✅ Seeded Admin ${email}`);
+        } catch (err: any) {
+            console.log(`Skipped Admin ${email}:`, err.message);
+        }
+    }
+
     console.log("🎉 Seeding completed!");
     process.exit(0);
 }

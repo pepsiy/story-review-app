@@ -16,60 +16,71 @@ const getCleanUrl = (url?: string) => {
     return url.replace("&channel_binding=require", "");
 };
 
-const pool1 = new Pool({ connectionString: getCleanUrl(url1) });
+const pool1 = url1 ? new Pool({ connectionString: getCleanUrl(url1) }) : null;
 const pool2 = url2 ? new Pool({ connectionString: getCleanUrl(url2) }) : null;
 const pool3 = url3 ? new Pool({ connectionString: getCleanUrl(url3) }) : null;
 
-// The HA Pool Wrapper
-let isFailingOver = false;
-let currentPool = pool1;
-if (activeNeon === '3' && pool3) {
-    currentPool = pool3;
-} else if (activeNeon === '2' && pool2) {
-    currentPool = pool2;
-}
+const pools = [pool1, pool2, pool3].filter(p => p !== null) as Pool[];
+let activePoolIndex = 0;
+if (activeNeon === '3' && pool3) activePoolIndex = pools.indexOf(pool3);
+else if (activeNeon === '2' && pool2) activePoolIndex = pools.indexOf(pool2);
+else if (activeNeon === '2' && pool2) activePoolIndex = pools.indexOf(pool2);
 
-// Prevent unhandled errors from crashing the Node instance
-pool1.on('error', (err: any) => {
-    const isQuotaError = err?.code === 'XX000' || err?.message?.includes('endpoint is currently disabled') || err?.message?.includes('quota');
-    if (isQuotaError && pool2 && !isFailingOver) {
-        console.warn(`[HA Database] NEON 1 Pool emitted Quota Error! Auto-failing over to NEON 2...`);
-        isFailingOver = true;
-        // CRITICAL: End the broken pool so it stops retrying and crashing the app in the background
-        pool1.end().catch(e => console.error('Error ending crashed pool1:', e));
-    } else {
-        console.error('[HA Database Pool 1] Unexpected background error:', err?.message || err);
+// The HA Pool Wrapper Proxy
+const currentPool = new Proxy(pools[activePoolIndex], {
+    get(target, prop, receiver) {
+        if (prop === 'query' || prop === 'connect') {
+            return async (...args: any[]) => {
+                let attempts = 0;
+                while (attempts < pools.length) {
+                    const pool = pools[activePoolIndex];
+                    try {
+                        const method = (pool as any)[prop].bind(pool);
+                        return await method(...args);
+                    } catch (err: any) {
+                        const msg = err.message?.toLowerCase() || '';
+                        // Identify quota exhaustion or endpoint suspension
+                        if (msg.includes('quota') || msg.includes('exceed') || msg.includes('compute') || msg.includes('endpoint') || msg.includes('transfer')) {
+                            console.error(`🔴 [DB-HA] Pool ${activePoolIndex + 1} QUOTA EXCEEDED or DEAD. Rotating...`);
+                            activePoolIndex = (activePoolIndex + 1) % pools.length;
+                            attempts++;
+                        } else {
+                            throw err; // Real SQL logic error
+                        }
+                    }
+                }
+                throw new Error("🔴 [DB-HA] FATAL: All DB pools exhausted their quotas!");
+            };
+        }
+
+        const value = (pools[activePoolIndex] as any)[prop];
+        if (typeof value === 'function') {
+            return value.bind(pools[activePoolIndex]);
+        }
+        return value;
     }
 });
 
-if (pool2) {
-    pool2.on('error', (err: any) => {
-        console.error('[HA Database Pool 2] Unexpected background error:', err?.message || err);
+// Prevent unhandled errors from crashing the Node instance
+pools.forEach((pool, index) => {
+    pool.on('error', (err: any) => {
+        const msg = err?.message?.toLowerCase() || '';
+        const isQuotaError = err?.code === 'XX000' || msg.includes('endpoint') || msg.includes('quota') || msg.includes('exceed') || msg.includes('transfer');
+
+        if (isQuotaError) {
+            console.warn(`[HA Database] NEON ${index + 1} Pool emitted Quota Error in background!`);
+            // If it's the active pool, we switch
+            if (activePoolIndex === index) {
+                console.warn(`[HA Database] Auto-rotating from NEON ${index + 1} to next available pool...`);
+                activePoolIndex = (activePoolIndex + 1) % pools.length;
+            }
+            // Close broken pool to prevent memory leaks / constant retries
+            pool.end().catch(e => console.error(`Error ending crashed pool ${index + 1}:`, e));
+            pools.splice(index, 1); // Remove from active rotation array
+        } else {
+            console.error(`[HA Database Pool ${index + 1}] Unexpected background error:`, err?.message || err);
+        }
     });
-}
-
-// Override query to add HA Failover directly on the instance (to preserve prototype chain)
-const originalQuery = currentPool.query.bind(currentPool);
-
-(currentPool as any).query = async (textOrConfig: any, values?: any[]) => {
-    try {
-        if (isFailingOver && pool2) {
-            return values ? await pool2.query(textOrConfig, values) : await pool2.query(textOrConfig);
-        }
-        return values ? await originalQuery(textOrConfig, values) : await originalQuery(textOrConfig);
-    } catch (error: any) {
-        // Check if error is Neon rate limit / compute limit (often XX000 or 503)
-        const isQuotaError = error?.code === 'XX000' || error?.message?.includes('endpoint is currently disabled') || error?.message?.includes('quota');
-
-        if (isQuotaError && pool2 && currentPool === pool1 && !isFailingOver) {
-            console.warn(`[HA Database] NEON 1 query failed with Quota! Failing over...`);
-            isFailingOver = true;
-            pool1.end().catch(() => { }); // end quietly
-            return values ? await pool2.query(textOrConfig, values) : await pool2.query(textOrConfig);
-        }
-        throw error;
-    }
-};
-
+});
 export const db = drizzle(currentPool, { schema });
 export * from './schema';
