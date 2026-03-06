@@ -1,5 +1,5 @@
+export const dynamic = 'force-dynamic';
 export const revalidate = 1800; // 30 mins
-
 import { db, works } from "@repo/db";
 import { desc, gte } from "drizzle-orm";
 

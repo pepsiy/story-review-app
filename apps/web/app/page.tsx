@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ReadingHistoryWidget } from "@/components/ReadingHistoryWidget";
 import { GenresWidget } from "@/components/GenresWidget";
 
+export const dynamic = 'force-dynamic';
+
 export default async function Home() {
   let hotWorks: any[] = [], newWorks: any[] = [];
 
