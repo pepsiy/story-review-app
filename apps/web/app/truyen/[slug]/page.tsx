@@ -1,5 +1,5 @@
 import { db } from "@repo/db";
-import { works, chapters } from "@repo/db";
+import { works, chapters, seoMeta } from "@repo/db";
 import { eq, asc, ilike, ne, and, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -8,6 +8,7 @@ import { LikeButton } from "@/components/LikeButton";
 import { ViewTracker } from "@/components/ViewTracker";
 import { WorkCommentSection } from "@/components/WorkCommentSection";
 import { auth } from "@/auth";
+import { generateArticleJsonLd, generateBreadcrumbJsonLd } from "@/lib/seo";
 
 export const revalidate = 60;
 
@@ -24,11 +25,55 @@ function genreNameToSlug(name: string): string {
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
     const { slug } = await params;
-    const work = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
-    if (!work[0]) return { title: "Không tìm thấy truyện" };
+
+    // Query work details
+    const workList = await db.select().from(works).where(eq(works.slug, slug)).limit(1);
+    const work = workList[0];
+    if (!work) return { title: "Không tìm thấy truyện" };
+
+    // Query SEO meta from specialized table
+    const seoList = await db.select().from(seoMeta).where(and(eq(seoMeta.entityType, "WORK"), eq(seoMeta.entityId, work.id))).limit(1);
+    const seo = seoList[0];
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://storyreview.com';
+    const url = `${baseUrl}/truyen/${slug}`;
+    const title = seo?.title || `${work.title} - Review & Tóm Tắt | StoryReview`;
+    const description = seo?.description || work.description || `Đọc review truyện ${work.title} mới nhất, chuẩn xác nhất từ đọc giả StoryReview.`;
+    const canonicalUrl = url;
+
+    // Choose cover image
+    const coverImageUrl = seo?.ogImage || work.coverImage;
+    const images = coverImageUrl ? [{ url: coverImageUrl, width: 1200, height: 630, alt: title }] : [];
+
+    const publishedTime = work.createdAt ? work.createdAt.toISOString() : new Date().toISOString();
+    const modifiedTime = work.updatedAt ? work.updatedAt.toISOString() : publishedTime;
+    const section = work.genre ? work.genre.split(',')[0].trim() : undefined;
+
     return {
-        title: `${work[0].title} - Review & Tóm Tắt | StoryReview`,
-        description: work[0].description || `Đọc review truyện ${work[0].title} của tác giả ${work[0].author}.`,
+        title,
+        description,
+        alternates: {
+            canonical: canonicalUrl,
+        },
+        openGraph: {
+            title,
+            description,
+            url,
+            siteName: "StoryReview",
+            locale: "vi_VN",
+            type: "article",
+            images,
+            publishedTime,
+            modifiedTime,
+            authors: work.author ? [work.author] : undefined,
+            section,
+        },
+        twitter: {
+            card: "summary_large_image",
+            title,
+            description,
+            images,
+        }
     };
 }
 
@@ -81,6 +126,7 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ slu
                 description: works.description,
                 updatedAt: works.updatedAt,
                 createdAt: works.createdAt,
+                deletedAt: works.deletedAt,
             })
             .from(works)
             .where(and(ilike(works.genre, `%${firstGenre}%`), ne(works.id, work.id)))
@@ -88,20 +134,38 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ slu
             .limit(5);
     }
 
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://storyreview.com';
+    const currentUrl = `${baseUrl}/truyen/${slug}`;
+    const articleJsonLd = generateArticleJsonLd(work, currentUrl, work.coverImage || "");
+    const breadcrumbJsonLd = generateBreadcrumbJsonLd([
+        { name: "Trang chủ", url: baseUrl },
+        { name: work.title, url: currentUrl },
+    ]);
+
     return (
         <div className="min-h-screen bg-slate-50">
-            {/* Breadcrumb */}
-            <div className="bg-white border-b py-2">
+            {/* JSON-LD Structured Data */}
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(articleJsonLd) }}
+            />
+            <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+            />
+
+            {/* Breadcrumb - Semantic <nav> */}
+            <nav aria-label="breadcrumb" className="bg-white border-b py-2">
                 <div className="container mx-auto px-4 max-w-6xl text-sm text-slate-600">
                     <Link href="/" className="hover:text-blue-600 transition-colors">Trang chủ</Link>
-                    <span className="mx-2 text-slate-400">/</span>
-                    <span className="text-slate-900">{work.title}</span>
+                    <span className="mx-2 text-slate-400" aria-hidden="true">/</span>
+                    <span className="text-slate-900" aria-current="page">{work.title}</span>
                 </div>
-            </div>
+            </nav>
 
             <main className="container mx-auto px-4 py-6 max-w-6xl">
-                {/* Info Section */}
-                <div className="bg-white rounded-lg shadow-sm overflow-hidden flex flex-col md:flex-row p-5 gap-5 mb-6">
+                {/* Info Section - Semantic <article> wrapper starts */}
+                <article className="bg-white rounded-lg shadow-sm overflow-hidden flex flex-col md:flex-row p-5 gap-5 mb-6">
                     {/* Cover Image */}
                     <div className="w-full md:w-44 flex-shrink-0">
                         <div className="aspect-[2/3] relative rounded overflow-hidden shadow bg-slate-200">
@@ -183,7 +247,7 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ slu
                             </div>
                         </div>
                     </div>
-                </div>
+                </article>
 
                 {/* Two-Column Layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -218,8 +282,8 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ slu
                         <WorkCommentSection workId={work.id} workSlug={slug} user={user} />
                     </div>
 
-                    {/* Right: Sidebar */}
-                    <div className="space-y-5">
+                    {/* Right: Sidebar - Semantic <aside> */}
+                    <aside className="space-y-5">
                         {/* Same Genre */}
                         <div className="bg-white p-5 rounded-lg shadow-sm">
                             <h3 className="font-bold text-slate-900 mb-3 text-base border-b pb-2">
@@ -255,7 +319,7 @@ export default async function WorkDetailPage({ params }: { params: Promise<{ slu
                                 <p className="text-sm text-slate-400 italic">Không tìm thấy truyện cùng thể loại.</p>
                             )}
                         </div>
-                    </div>
+                    </aside>
                 </div>
 
                 <ViewTracker workId={work.id} />

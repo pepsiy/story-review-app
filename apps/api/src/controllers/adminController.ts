@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { eq, desc, asc, sql } from "drizzle-orm";
 import { db } from "../../../../packages/db/src";
 import { works, chapters, genres, systemSettings } from "../../../../packages/db/src";
+import { generateAndSaveSeoMeta } from "../services/seoGenerator";
 
 // --- Works ---
 
@@ -45,6 +46,11 @@ export const createWork = async (req: Request, res: Response) => {
                     console.warn(`Could not auto-add genre ${gName}:`, err);
                 }
             }
+        }
+
+        // Trigger AI Meta generation asynchronously
+        if (newWork[0]) {
+            generateAndSaveSeoMeta('WORK', newWork[0].id, newWork[0].title, description || newWork[0].title, author || undefined);
         }
 
         res.status(201).json(newWork[0]);
@@ -113,6 +119,9 @@ export const updateWork = async (req: Request, res: Response) => {
         if (updatedWork.length === 0) {
             return res.status(404).json({ error: "Work not found" });
         }
+
+        // Generate AI Meta
+        generateAndSaveSeoMeta('WORK', updatedWork[0].id, updatedWork[0].title, description || updatedWork[0].title, author || undefined);
 
         res.json(updatedWork[0]);
     } catch (error: any) {
